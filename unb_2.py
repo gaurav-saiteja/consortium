@@ -13,6 +13,7 @@ VENUE_CODE = "ALUC"
 EVENT_CODE = "ET00502689"
 STATE_FILE = "second_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
+IGNORED_ROWS = ["R", "S"]
 
 # Track WARP State natively
 USE_WARP = False
@@ -128,7 +129,7 @@ def save_state(deltas, commit_msg="Update seat state"):
     return latest_state
 
 def trigger_ntfy(message):
-    print(f"\n[!] ALERTING VIA NTFY: {message}")
+    print(f"\n[!] ALERTING VIA NTFY: \n{message}\n")
     for i in range(1):
         try:
             resp = requests.post(
@@ -191,7 +192,7 @@ def make_bms_request(method, url, max_retries=3, **kwargs):
 def fetch_sessions():
     sessions = []
     for date_code in DATES:
-        time.sleep(3)
+        time.sleep(6)
         print(f"\n[NETWORK] Fetching sessions for Date: {date_code}...")
         url = f"https://in.bookmyshow.com/api/movies-data/seatlayout/v1/primary?eventCode={EVENT_CODE}&dateCode={date_code}&regionCode=HYD&venueCode={VENUE_CODE}"
         
@@ -331,36 +332,49 @@ def main():
             previous_total = state[s_id].get("total", 0)
             previous_rows = state[s_id].get("rows", {})
             
-            newly_unblocked_count = 0
-            unblocked_rows_list = []
+            total_unblocked_count = 0
+            notifiable_unblocked_count = 0
+            notifiable_unblocked_rows = []
             
             for row, seats in current_seats.items():
                 old_seats_in_row = previous_rows.get(row, [])
                 new_seats = set(seats) - set(old_seats_in_row)
                 
                 if new_seats:
-                    newly_unblocked_count += len(new_seats)
-                    unblocked_rows_list.append(row)
+                    total_unblocked_count += len(new_seats)
+                    
+                    # Only add to notification counts if the row is NOT blocklisted
+                    if row not in IGNORED_ROWS:
+                        notifiable_unblocked_count += len(new_seats)
+                        notifiable_unblocked_rows.append(row)
             
-            if newly_unblocked_count > 0:
-                print(f"    -> 🟢 DETECTED UNBLOCKS: +{newly_unblocked_count} new seats!")
+            if total_unblocked_count > 0:
+                print(f"    -> 🟢 DETECTED UNBLOCKS: +{total_unblocked_count} total new seats!")
                 
-                if not is_first_run:
-                    # Check if the unblocked seats meet the minimum threshold of 6
-                    if newly_unblocked_count >= 2:
-                        rows_str = ", ".join(sorted(unblocked_rows_list))
-                        human_date = humanize_date(s_date)
+                # Verbose logging regarding the blocklist filter
+                if notifiable_unblocked_count > 0:
+                    print(f"    -> 🟢 Notifiable seats (excluding blocklist): +{notifiable_unblocked_count} in rows {', '.join(sorted(notifiable_unblocked_rows))}.")
+                else:
+                    print(f"    -> ⚪ All {total_unblocked_count} unblocked seats were in ignored rows {IGNORED_ROWS}. Notifiable count is 0.")
 
+                if not is_first_run:
+                    # Check threshold solely against the notifiable count
+                    if notifiable_unblocked_count >= 9:
+                        print(f"    -> 🔔 Threshold met ({notifiable_unblocked_count} >= 9). Triggering notification!")
+                        
+                        rows_str = ", ".join(sorted(notifiable_unblocked_rows))
+                        human_date = humanize_date(s_date)
+                        
                         msg = (
-                            f"[{newly_unblocked_count}] ODSY DOLBY."
-                            f"{rows_str} rows unblocked for #SpiderManBrandNewDay at ALLU DOLBY CINEMA.\n\n"
+                            f"[{notifiable_unblocked_count}] BND PCX. "
+                            f"{rows_str} rows unblocked for #SpiderManBrandNewDay at Prasads PCX Screen.\n\n"
                             f"{human_date}, {s_time}"
                         )
                         trigger_ntfy(msg)
-                    else:
-                        print(f"    -> 🟡 Less than 6 seats unblocked ({newly_unblocked_count}). Skipping notification to avoid spam.")
+                    elif notifiable_unblocked_count > 0:
+                        print(f"    -> 🟡 Notifiable count ({notifiable_unblocked_count}) is less than threshold (9). Skipping notification.")
                 
-                # Update memory & Track Delta
+                # We save EVERYTHING to memory (even blocklisted unblocks) so they aren't marked as "new" next time
                 state[s_id]["rows"] = current_seats
                 state[s_id]["total"] = current_total
                 deltas[s_id] = state[s_id]
