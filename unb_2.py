@@ -366,8 +366,8 @@ def main():
                         human_date = humanize_date(s_date)
                         
                         msg = (
-                            f"[{notifiable_unblocked_count}] BND PCX. "
-                            f"{rows_str} rows unblocked for #SpiderManBrandNewDay at Prasads PCX Screen.\n\n"
+                            f"[{notifiable_unblocked_count}] BND DOLBY. "
+                            f"{rows_str} rows unblocked for #SpiderManBrandNewDay at ALLU DOLBY CINEMA.\n\n"
                             f"{human_date}, {s_time}"
                         )
                         trigger_ntfy(msg)
