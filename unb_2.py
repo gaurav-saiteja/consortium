@@ -13,7 +13,7 @@ VENUE_CODE = "ALUC"
 EVENT_CODE = "ET00502689"
 STATE_FILE = "second_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
-IGNORED_ROWS = ["R", "S"]
+IGNORED_ROWS = ["R"]
 
 # Track WARP State natively
 USE_WARP = False
@@ -359,7 +359,7 @@ def main():
 
                 if not is_first_run:
                     # Check threshold solely against the notifiable count
-                    if notifiable_unblocked_count >= 9:
+                    if notifiable_unblocked_count >= 2:
                         print(f"    -> 🔔 Threshold met ({notifiable_unblocked_count} >= 9). Triggering notification!")
                         
                         rows_str = ", ".join(sorted(notifiable_unblocked_rows))
