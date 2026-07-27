@@ -13,7 +13,7 @@ VENUE_CODE = "ALUC"
 EVENT_CODE = "ET00502689"
 STATE_FILE = "second_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
-IGNORED_ROWS = ["R"]
+IGNORED_ROWS = ["L","M","N","O","P","Q","R","S"]
 
 # Track WARP State natively
 USE_WARP = False
@@ -315,7 +315,7 @@ def main():
             
             print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Date: {s_date} Time: {s_time})")
             print("    -> Sleeping for 30 seconds (Rate Limit Prevention)...")
-            time.sleep(20) 
+            time.sleep(19) 
             
             str_data = fetch_seat_layout(s_id)
             if not str_data:
