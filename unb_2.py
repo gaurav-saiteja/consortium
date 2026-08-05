@@ -8,12 +8,12 @@ import subprocess
 from datetime import datetime
 
 # --- CONFIGURATION ---
-DATES = ["20260731"]
-VENUE_CODE = "ALUC"
-EVENT_CODE = "ET00502689"
-STATE_FILE = "second_day_state.json"
+DATES = ["20260805"]
+VENUE_CODE = "VRKC"
+EVENT_CODE = "ET00448417"
+STATE_FILE = "temp_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
-IGNORED_ROWS = ["L","M","N","O","P","Q","R","S"]
+IGNORED_ROWS = []
 
 # Track WARP State natively
 USE_WARP = False
