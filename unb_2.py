@@ -208,7 +208,7 @@ def fetch_sessions():
             
             pcx_count = 0
             for show in shows:
-                if show.get("attributes") == "DOLBY CINEMA":
+                if show.get("attributes") == "CHANDRAKALA AIR COOLED":
                     sessions.append({
                         "sessionId": show["sessionId"],
                         "dateCode": show["showDateCode"],
