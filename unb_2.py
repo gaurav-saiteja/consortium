@@ -9,7 +9,7 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 DATES = ["20260805"]
-VENUE_CODE = "VRKC"
+VENUE_CODE = "ACPM"
 EVENT_CODE = "ET00448417"
 STATE_FILE = "temp_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
