@@ -8,8 +8,8 @@ import subprocess
 from datetime import datetime
 
 # --- CONFIGURATION ---
-DATES = ["20260805"]
-VENUE_CODE = "ACPM"
+DATES = ["20260806"]
+VENUE_CODE = "SNKH"
 EVENT_CODE = "ET00448417"
 STATE_FILE = "temp_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -208,7 +208,8 @@ def fetch_sessions():
             
             pcx_count = 0
             for show in shows:
-                if show.get("attributes") == "CHANDRAKALA AIR COOLED":
+                #if show.get("attributes") == "CHANDRAKALA AIR COOLED":
+                if show.get("showTime") == "09:15 PM":
                     sessions.append({
                         "sessionId": show["sessionId"],
                         "dateCode": show["showDateCode"],
