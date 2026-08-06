@@ -222,7 +222,8 @@ def parse_layout(str_data):
     for cat in header_data.split("|"):
         c_parts = cat.split(":")
         if len(c_parts) >= 4:
-            categories[c_parts[1]] = {"cat_code": c_parts[0], "area_id": c_parts[3]}
+            # c_parts[2] extracts the internal category index (e.g. 0000000003) instead of "GOLD"
+            categories[c_parts[1]] = {"cat_code": c_parts[2], "area_id": c_parts[3]}
             
     rows_data = parts[1] if len(parts) > 1 else parts[0]
     rows = rows_data.split("|")
@@ -233,17 +234,25 @@ def parse_layout(str_data):
     for row in rows:
         if not row or ":" not in row: continue
         elements = row.split(":")
+        row_index = elements[0]      # Extract internal row index (e.g. "11")
         row_letter = elements[1]
         seats = elements[2:]
         
         available_in_row = []
         for seat in seats:
-            match = re.search(r"([A-Z])[14]\d+\+(\d+)", seat)
+            # Captures: 1=Block Code, 2=Backend Seat Index, 3=Display Seat Num
+            match = re.search(r"([A-Z])[14](\d+)\+(\d+)", seat)
             if match:
                 block_code = match.group(1)
-                seat_num = match.group(2)
+                backend_seat = match.group(2)
+                seat_num = match.group(3)
+                
                 available_in_row.append(seat_num)
-                seat_metadata[f"{row_letter}_{seat_num}"] = block_code
+                seat_metadata[f"{row_letter}_{seat_num}"] = {
+                    "block_code": block_code,
+                    "row_index": row_index,
+                    "backend_seat": backend_seat
+                }
                 
         if available_in_row:
             available_seats_by_row[row_letter] = available_in_row
@@ -254,17 +263,19 @@ def parse_layout(str_data):
 # AUTO-LOCK / PAYMENT SNIPER FUNCTIONS
 # =======================================================
 
-def lock_seat(session_id, row, seat_num, cat_code, area_id):
-    logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock Row {row} Seat {seat_num} ({cat_code})...")
+def lock_seat(session_id, row_index, backend_seat, cat_code, area_id):
+    logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
+    
+    padded_area = str(area_id).zfill(4) # creates "0002" out of "2"
     
     payload = {
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
-        "sessionId": session_id,
-        "ticketCategory": cat_code,
+        "sessionId": str(session_id),
+        "ticketCategory": padded_area,
         "numberOfTickets": "1",
-        "selectedSeats": f"|1|{cat_code}|{area_id}|{row}|{seat_num}|",
+        "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
         "eventCode": EVENT_CODE,
         "version": "18234",
@@ -297,6 +308,11 @@ def lock_seat(session_id, row, seat_num, cat_code, area_id):
     if resp and resp.status_code == 200:
         try:
             r_json = resp.json()
+            
+            logger.info("    -> 📄 [SNIPER] Lock Seat Response:")
+            for k, v in r_json.items():
+                logger.info(f"        {k}: {v}")
+                
             t_id = r_json.get("transactionId")
             t_uid = r_json.get("transactionUID")
             if t_id and t_uid:
@@ -381,15 +397,15 @@ def initiate_payment(trans_id, trans_uid):
     logger.error("    -> 🔴 [SNIPER] FAILED to generate payment intent.")
     return None
 
-def execute_snipe(session_id, row, seat_num, block_code, categories):
-    cat_info = categories.get(block_code)
+def execute_snipe(session_id, row, seat_num, meta, categories):
+    cat_info = categories.get(meta["block_code"])
     if not cat_info: return False
     
     c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
-    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Cat: {c_code}, Area: {a_id})")
+    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
     
-    # 1. Lock
-    t_id, t_uid = lock_seat(session_id, row, seat_num, c_code, a_id)
+    # 1. Lock (passing backend row & backend seat instead of display names)
+    t_id, t_uid = lock_seat(session_id, meta["row_index"], meta["backend_seat"], c_code, a_id)
     if not t_id: return False
     
     # 2. Pay
@@ -462,9 +478,9 @@ def main():
                         
                         if snipable_seats:
                             target_seat = list(snipable_seats)[0] 
-                            b_code = seat_metadata.get(f"{row}_{target_seat}")
+                            meta = seat_metadata.get(f"{row}_{target_seat}")
                             
-                            success = execute_snipe(s_id, row, target_seat, b_code, categories_map)
+                            success = execute_snipe(s_id, row, target_seat, meta, categories_map)
                             if success:
                                 has_sniped_this_cycle = True
                     
