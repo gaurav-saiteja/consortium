@@ -436,7 +436,6 @@ def main():
 
     logger.info("Loading initial state from local file/git...")
     state = load_state()
-    is_first_run = len(state) == 0
 
     cycle_count = 1
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
@@ -459,7 +458,7 @@ def main():
             current_total = sum(len(seats) for seats in current_seats.values())
             
             if s_id not in state:
-                state[s_id] = {"date": session["dateCode"], "time": session["time"], "total": 0, "rows": {}}
+                state[s_id] = {"date": session["dateCode"], "time": session["time"], "total": 0, "rows": {}, "sniped_seats": []}
             
             previous_rows = state[s_id].get("rows", {})
             total_unblocked_count = 0
@@ -467,22 +466,33 @@ def main():
             has_sniped_this_cycle = False
             
             for row, seats in current_seats.items():
+                # 1. NEW SNIPER LOGIC: Evaluates ALL currently available seats, independent of diffs
+                if not has_sniped_this_cycle and row in DESIRED_SEATS:
+                    snipable_seats = set(seats).intersection(DESIRED_SEATS[row])
+                    
+                    # Filter out seats we've already successfully sniped
+                    sniped_history = state[s_id].get("sniped_seats", [])
+                    valid_targets = [s for s in snipable_seats if f"{row}_{s}" not in sniped_history]
+                    
+                    if valid_targets:
+                        target_seat = valid_targets[0] 
+                        meta = seat_metadata.get(f"{row}_{target_seat}")
+                        
+                        success = execute_snipe(s_id, row, target_seat, meta, categories_map)
+                        if success:
+                            has_sniped_this_cycle = True
+                            
+                            # Add to blacklist so we never snipe it again if the lock expires
+                            state[s_id].setdefault("sniped_seats", []).append(f"{row}_{target_seat}")
+                            # Force delta update so the blacklist saves to Git immediately
+                            deltas[s_id] = state[s_id]
+
+                # 2. ORIGINAL UNBLOCK LOGIC: Strictly for logging and state management
                 old_seats_in_row = previous_rows.get(row, [])
                 new_seats = set(seats) - set(old_seats_in_row)
                 
                 if new_seats:
                     total_unblocked_count += len(new_seats)
-                    
-                    if not is_first_run and not has_sniped_this_cycle and row in DESIRED_SEATS:
-                        snipable_seats = new_seats.intersection(DESIRED_SEATS[row])
-                        
-                        if snipable_seats:
-                            target_seat = list(snipable_seats)[0] 
-                            meta = seat_metadata.get(f"{row}_{target_seat}")
-                            
-                            success = execute_snipe(s_id, row, target_seat, meta, categories_map)
-                            if success:
-                                has_sniped_this_cycle = True
                     
             if total_unblocked_count > 0:
                 logger.info(f"    -> 🟢 DETECTED UNBLOCKS: +{total_unblocked_count} new seat(s) globally for {session['time']}.")
@@ -503,10 +513,7 @@ def main():
             
         elapsed = timedelta(seconds=int(time.time() - start_time))
         logger.info(f"🏁 Cycle {cycle_count} Complete. Runtime: {elapsed} / 05:55:00 limit.")
-        
-        if is_first_run: 
-            is_first_run = False
-        
+                
         cycle_count += 1
         
 if __name__ == "__main__":
