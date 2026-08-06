@@ -18,9 +18,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260807"]
-VENUE_CODE = "ACAS"
-EVENT_CODE = "ET00452034"
+DATES = ["20260813"]
+VENUE_CODE = "PRHN"
+EVENT_CODE = "ET00502600"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 STATE_FILE = "sniped_state_2.json"
 
@@ -188,7 +188,7 @@ def fetch_sessions():
         try:
             shows = resp.json().get("data", {}).get("showTimes", [])
             for show in shows:
-                if show.get("showTime") == "01:00 PM":
+                if show.get("showTime") == "02:30 PM":
                     # Extract attributes or fallback to screen name to populate your notification correctly
                     s_attr = show.get("attributes", show.get("screenName", "Unknown Screen"))
                     
@@ -246,7 +246,7 @@ def parse_layout(str_data):
         
         available_in_row = []
         for seat in seats:
-            match = re.search(r"([A-Z])[14](\d+)\+(\d+)", seat)
+            match = re.search(r"([A-Z])[24](\d+)\+(\d+)", seat)
             if match:
                 block_code = match.group(1)
                 backend_seat = match.group(2)
