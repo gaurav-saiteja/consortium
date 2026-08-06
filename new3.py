@@ -28,6 +28,10 @@ EMAIL = os.environ.get("BMS_EMAIL")
 PHONE = os.environ.get("BMS_PHONE")
 
 # Define your desired seats here. 
+#DESIRED_SEATS = {
+#    "F": ["11", "12", "13"],
+#    "K": ["09", "08"] 
+#}
 DESIRED_SEATS = {
     "F": ["11"]
 }
