@@ -22,6 +22,7 @@ DATES = ["20260807"]
 VENUE_CODE = "ACAS"
 EVENT_CODE = "ET00452034"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
+STATE_FILE = "sniped_state.json"
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
@@ -74,6 +75,51 @@ def humanize_date(date_str):
         suffix = ['th', 'st', 'nd', 'rd', 'th'][min(day % 10, 4)]
     month_name = dt.strftime("%B")
     return f"{day}{suffix} {month_name}"
+
+def quiet_git_pull():
+    logger.debug("Executing Git pull...")
+    subprocess.run(["git", "fetch", "origin", "main"], capture_output=True, check=False)
+    subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, check=False)
+
+def quiet_git_push():
+    logger.debug("Executing Git push...")
+    res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True, check=False)
+    return res.returncode == 0
+
+def load_state():
+    quiet_git_pull()
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f: 
+                # Load the list and convert to a set for fast lookups
+                return set(json.load(f))
+        except json.JSONDecodeError: 
+            logger.warning("Failed to decode local state JSON. Returning empty set.")
+    return set()
+
+def save_state(sniped_set):
+    logger.info("💾 Saving sniped seat state to Git...")
+    for attempt in range(3):
+        quiet_git_pull()
+        
+        # Write the set back as a JSON list
+        with open(STATE_FILE, "w") as f:
+            json.dump(list(sniped_set), f, indent=2)
+            
+        subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        
+        if STATE_FILE in status.stdout:
+            subprocess.run(["git", "commit", "-m", "Update sniped seats state"], capture_output=True, check=False)
+            if quiet_git_push(): 
+                logger.info("✅ State successfully saved and pushed to remote.")
+                return
+            logger.warning(f"Git push failed on attempt {attempt+1}/3. Retrying...")
+            time.sleep(2)
+        else:
+            logger.debug("No state changes detected by Git.")
+            return
+    logger.error("❌ Failed to push state updates after 3 attempts.")
 
 def trigger_ntfy(message, attach_url=None):
     logger.info(f"🔔 ALERTING VIA NTFY:\n{message}")
@@ -389,7 +435,9 @@ def main():
 
     # In-memory tracking to ensure we don't spam snipe requests for the same seat
     # Format: set("sessionId_row_seatNum")
-    sniped_seats_memory = set()
+    logger.info("Loading initial state from GitHub...")
+    sniped_seats_memory = load_state()
+    logger.info(f"Loaded {len(sniped_seats_memory)} previously sniped seat(s) from memory.")
 
     cycle_count = 1
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
@@ -419,15 +467,15 @@ def main():
                     
                     if valid_targets:
                         target_seat = valid_targets[0] 
-                        meta = seat_metadata.get(f"{row}_{target_seat}")
-                        
+                        meta = seat_metadata.get(f"{row}_{target_seat}")                        
                         success = execute_snipe(session, row, target_seat, meta, categories_map)
                         if success:
-                            has_sniped_this_cycle = True
-                            
+                            has_sniped_this_cycle = True                            
                             # Add to in-memory blacklist so we don't snipe it again
                             sniped_seats_memory.add(f"{s_id}_{row}_{target_seat}")
-                            logger.info(f"✅ Successfully sniped and memorized: {s_id}_{row}_{target_seat}")
+                            logger.info(f"✅ Successfully sniped and memorized: {s_id}_{row}_{target_seat}")                            
+                            # Trigger Git save ONLY upon a successful snipe
+                            save_state(sniped_seats_memory)
 
         cycle_count += 1
         
