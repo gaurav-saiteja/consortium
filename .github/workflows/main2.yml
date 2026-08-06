@@ -59,4 +59,4 @@ jobs:
         env:
           BMS_EMAIL: ${{ secrets.BMS_EMAIL }}
           BMS_PHONE: ${{ secrets.BMS_PHONE }}
-        run: python -u new2.py
+        run: python -u new3.py
