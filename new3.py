@@ -12,8 +12,7 @@ from datetime import datetime
 # --- LOGGING CONFIGURATION ---
 logging.basicConfig(
     level=logging.INFO,
-    format="[%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    format="%(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -90,6 +89,7 @@ def quiet_git_push():
     return res.returncode == 0
 
 def load_state():
+    logger.info("[GIT] Loading initial state from repository...")
     quiet_git_pull()
     if os.path.exists(STATE_FILE):
         try:
@@ -143,11 +143,11 @@ def trigger_ntfy(message, attach_url=None):
 def toggle_warp():
     global USE_WARP
     if USE_WARP:
-        logger.info("🔌 Disconnecting Cloudflare WARP...")
+        logger.info("Disconnecting Cloudflare WARP...")
         subprocess.run(["warp-cli", "--accept-tos", "disconnect"], capture_output=True, check=False)
         USE_WARP = False
     else:
-        logger.info("🛡️ Connecting Cloudflare WARP to bypass blocks...")
+        logger.info("Connecting Cloudflare WARP to bypass blocks...")
         subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
         time.sleep(5)
         USE_WARP = True
@@ -175,11 +175,16 @@ def make_bms_request(method, url, max_retries=3, **kwargs):
     return None
 
 def fetch_sessions():
+    logger.info("==================================================")
+    logger.info("STARTING TARGETED SEAT SNIPER (CLEAN MODE)")
+    logger.info("==================================================\nFetching valid sessions...\n")
     sessions = []
-    logger.info(f"🔎 Fetching target sessions for Event: {EVENT_CODE}, Venue: {VENUE_CODE}")
+    logger.info(f"Fetching target sessions for Event: {EVENT_CODE}, Venue: {VENUE_CODE}")
     for date_code in DATES:
+        logger.info(f"[NETWORK] Fetching sessions for Date: {date_code}...")
         time.sleep(6)
         url = f"https://in.bookmyshow.com/api/movies-data/seatlayout/v1/primary?eventCode={EVENT_CODE}&dateCode={date_code}&regionCode=HYD&venueCode={VENUE_CODE}"
+        logger.info(f" -> Status: {resp.status_code} (Using WARP: {USE_WARP})")
         resp = make_bms_request('GET', url, headers=GET_HEADERS)
         if not resp or resp.status_code != 200: 
             logger.error(f"❌ Failed to fetch sessions for date {date_code}.")
@@ -187,6 +192,7 @@ def fetch_sessions():
             
         try:
             shows = resp.json().get("data", {}).get("showTimes", [])
+            logger.info(f" -> Found {len(shows)} total shows. Filtering for target time...")
             for show in shows:
                 if show.get("showTime") == "02:30 PM":
                     # Extract attributes or fallback to screen name to populate your notification correctly
@@ -202,14 +208,18 @@ def fetch_sessions():
             logger.error(f"❌ Error parsing session JSON for {date_code}: {e}")
             pass
             
-    logger.info(f"✅ Found {len(sessions)} matching session(s).")
+    logger.info(f"\n✅ Found a total of {len(sessions)} desired sessions to monitor.")
+    logger.info("==================================================\n")
     return sessions
 
 def fetch_seat_layout(session_id):
     logger.debug(f"Fetching raw layout for session {session_id}...")
+    logger.info(f"    -> [POST] https://services-in.bookmyshow.com/doTrans.aspx (Session: {session_id})")
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
     resp = make_bms_request('POST', url, headers=POST_HEADERS, data=payload)
+    if resp:
+        logger.info(f"    -> Status: {resp.status_code} (Using WARP: {USE_WARP})")
     if not resp or resp.status_code != 200: 
         logger.warning(f"⚠️ Failed to fetch seat layout for {session_id}.")
         return ""
@@ -261,8 +271,12 @@ def parse_layout(str_data):
                 
         if available_in_row:
             available_seats_by_row[row_letter] = available_in_row
-            
-    return available_seats_by_row, categories, seat_metadata
+
+    # Add this calculation right before the return statement
+    total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
+    
+    # Change the return statement to include it:
+    return available_seats_by_row, categories, seat_metadata, total_available_seats
 
 # =======================================================
 # AUTO-LOCK / PAYMENT SNIPER FUNCTIONS
@@ -438,29 +452,34 @@ def main():
 
     # In-memory tracking to ensure we don't spam snipe requests for the same seat
     # Format: set("sessionId_row_seatNum")
-    logger.info("Loading initial state from GitHub...")
+    logger.info("[GIT] Loading initial state from GitHub repository...")
     sniped_seats_memory = load_state()
-    logger.info(f"Loaded {len(sniped_seats_memory)} previously sniped seat(s) from memory.")
+    logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
 
     cycle_count = 1
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        logger.info(f"🔄 --- Starting Cycle {cycle_count} ---")
+        logger.info("==================================================")
+        logger.info(f"🔄 STARTING POLLING CYCLE {cycle_count}")
+        logger.info("==================================================\n")
         
         for index, session in enumerate(target_sessions, 1):
             s_id = session["sessionId"]
             
-            logger.info(f"⏳ Sleeping 23s before fetching layout for Session {s_id} ({index}/{total_sessions})...")
-            time.sleep(23) 
+            hum_date = humanize_date(session["dateCode"])
+            logger.info(f"[{index}/{total_sessions}] Checking Session {s_id} (Date: {hum_date} Time: {session['time']})")
+            logger.info("    -> Sleeping for 23 seconds (Rate Limit Prevention)...")
+            time.sleep(23)
             
             str_data = fetch_seat_layout(s_id)
             if not str_data: 
                 continue
                 
-            current_seats, categories_map, seat_metadata = parse_layout(str_data)
+            current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
+            logger.info(f"    -> Parse successful. Current Available Seats: {total_available}")
             
             # Track if we successfully sniped anything in this specific session to batch the Git save
             state_mutated_this_session = False
-            
+            desired_seat_found = False
             # 1. Iterate strictly over DESIRED_SEATS to enforce ROW priority
             for target_row, target_seat_list in DESIRED_SEATS.items():
                 
@@ -484,6 +503,7 @@ def main():
                         
                         if success:
                             # Add to in-memory blacklist so we never snipe it again
+                            desired_seat_found = True
                             sniped_seats_memory.add(seat_memory_key)
                             logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
                             
@@ -491,6 +511,14 @@ def main():
                             
                             # Required 1-second delay between successful lock requests
                             time.sleep(1)
+
+            if not desired_seat_found:
+                logger.info("    -> ⚪ No desired seats found.\n")
+            else:
+                logger.info("") # Just an empty line for spacing if actions were taken
+
+            if not state_mutated_this_session:
+                logger.info("[STATE] Cycle finished. No state changes detected.\n")
                             
             # 3. Batch Git Save (Execute only ONCE per session after all snipes are complete)
             if state_mutated_this_session:
