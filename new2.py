@@ -18,9 +18,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260806"]
-VENUE_CODE = "SNKH"
-EVENT_CODE = "ET00448417"
+DATES = ["20260807"]
+VENUE_CODE = "ACAS"
+EVENT_CODE = "ET00452034"
 STATE_FILE = "temp_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 IGNORED_ROWS = []
@@ -31,7 +31,7 @@ PHONE = os.environ.get("BMS_PHONE")
 
 # Define your desired seats here. 
 DESIRED_SEATS = {
-    "S": ["09"]
+    "L": ["04"]
 }
 
 # Track WARP State natively
@@ -189,7 +189,7 @@ def fetch_sessions():
         try:
             shows = resp.json().get("data", {}).get("showTimes", [])
             for show in shows:
-                if show.get("showTime") == "09:15 PM":
+                if show.get("showTime") == "01:00 PM":
                     sessions.append({"sessionId": show["sessionId"], "dateCode": show["showDateCode"], "time": show["showTime"]})
         except Exception as e: 
             logger.error(f"❌ Error parsing session JSON for {date_code}: {e}")
@@ -348,7 +348,7 @@ def initiate_payment(trans_id, trans_uid):
         f"--{boundary}", 'Content-Disposition: form-data; name="strCommand"', '', 'SETPAYMENT',
         f"--{boundary}", 'Content-Disposition: form-data; name="strVenueCode"', '', VENUE_CODE,
         f"--{boundary}", 'Content-Disposition: form-data; name="strParam1"', '', "'|TYPE=UPI|UPITYPE=QRCODE|IMAGEURL=''|PROCESSTYPE=REQUEST|LSID=|MEMBERID=|CLIENTID=movies|",
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam2"', '', '',
+        f"--{boundary}", 'Content-Disposition: form-data; name="strParam2"', '', '|ETICKET=Y|MTICKET=Y|',
         f"--{boundary}", 'Content-Disposition: form-data; name="strParam3"', '', EMAIL,
         f"--{boundary}", 'Content-Disposition: form-data; name="strParam4"', '', PHONE,
         f"--{boundary}", 'Content-Disposition: form-data; name="strParam5"', '', '',
