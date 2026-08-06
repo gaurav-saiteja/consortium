@@ -238,7 +238,7 @@ def parse_layout(str_data):
         
         available_in_row = []
         for seat in seats:
-            match = re.search(r"([A-Z])[14](\d+)", seat)
+            match = re.search(r"([A-Z])[14]\d+\+(\d+)", seat)
             if match:
                 block_code = match.group(1)
                 seat_num = match.group(2)
