@@ -30,7 +30,8 @@ PHONE = os.environ.get("BMS_PHONE")
 
 # Define your desired seats here. 
 DESIRED_SEATS = {
-    "F": ["11"]
+    "F": ["11", "12", "13"]
+    "K": ["09", "08"] 
 }
 
 # Track WARP State natively
@@ -455,27 +456,43 @@ def main():
                 
             current_seats, categories_map, seat_metadata = parse_layout(str_data)
             
-            has_sniped_this_cycle = False
+            # Track if we successfully sniped anything in this specific session to batch the Git save
+            state_mutated_this_session = False
             
-            for row, available_seat_list in current_seats.items():
-                # Evaluates desired seats strictly
-                if not has_sniped_this_cycle and row in DESIRED_SEATS:
-                    snipable_seats = set(available_seat_list).intersection(DESIRED_SEATS[row])
+            # 1. Iterate strictly over DESIRED_SEATS to enforce ROW priority
+            for target_row, target_seat_list in DESIRED_SEATS.items():
+                
+                # If this entire row is sold out or blocked, skip it entirely
+                if target_row not in current_seats:
+                    continue
                     
-                    # Filter out seats we've already successfully sniped during this runtime
-                    valid_targets = [s for s in snipable_seats if f"{s_id}_{row}_{s}" not in sniped_seats_memory]
+                available_in_row = current_seats[target_row]
+                
+                # 2. Iterate strictly over the array to enforce SEAT priority
+                for target_seat in target_seat_list:
+                    seat_memory_key = f"{s_id}_{target_row}_{target_seat}"
                     
-                    if valid_targets:
-                        target_seat = valid_targets[0] 
-                        meta = seat_metadata.get(f"{row}_{target_seat}")                        
-                        success = execute_snipe(session, row, target_seat, meta, categories_map)
+                    # If seat is available AND we haven't sniped it yet
+                    if target_seat in available_in_row and seat_memory_key not in sniped_seats_memory:
+                        
+                        meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                        
+                        # Lock it, generate QR, and push notification
+                        success = execute_snipe(session, target_row, target_seat, meta, categories_map)
+                        
                         if success:
-                            has_sniped_this_cycle = True                            
-                            # Add to in-memory blacklist so we don't snipe it again
-                            sniped_seats_memory.add(f"{s_id}_{row}_{target_seat}")
-                            logger.info(f"✅ Successfully sniped and memorized: {s_id}_{row}_{target_seat}")                            
-                            # Trigger Git save ONLY upon a successful snipe
-                            save_state(sniped_seats_memory)
+                            # Add to in-memory blacklist so we never snipe it again
+                            sniped_seats_memory.add(seat_memory_key)
+                            logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
+                            
+                            state_mutated_this_session = True
+                            
+                            # Required 1-second delay between successful lock requests
+                            time.sleep(1)
+                            
+            # 3. Batch Git Save (Execute only ONCE per session after all snipes are complete)
+            if state_mutated_this_session:
+                save_state(sniped_seats_memory)
 
         cycle_count += 1
         
