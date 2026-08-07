@@ -17,9 +17,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260808"]
-VENUE_CODE = "PRHN"
-EVENT_CODE = "ET00452034"
+DATES = ["20260813"]
+VENUE_CODE = "ALUC"
+EVENT_CODE = "ET00502689"
 STATE_FILE = "sniped_state_2.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 
