@@ -33,7 +33,7 @@ PHONE = os.environ.get("BMS_PHONE")
 #    "K": ["09", "08"] 
 #}
 DESIRED_SEATS = {
-    "F": ["11"]
+    "F": ["09"]
 }
 # Track WARP State natively
 USE_WARP = False
