@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 DATES = ["20260813"]
 VENUE_CODE = "ALUC"
-EVENT_CODE = "ET00502689"
 STATE_FILE = "sniped_state_2.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 
@@ -206,12 +205,9 @@ def find_target_session():
                     # Check both parent and child level for the matching Movie Code
                     parent_code = event.get("EventCode", "")
                     for child in event.get("ChildEvents", []):
-                        child_code = child.get("EventCode", "")
+                        # Extract the event code dynamically (prioritize child code, fallback to parent)
+                        current_event_code = child.get("EventCode", parent_code)
                         
-                        if EVENT_CODE not in [parent_code, child_code]:
-                            continue
-                            
-                        # If the movie matches, check the showtimes
                         for show in child.get("ShowTimes", []):
                             s_attr = show.get("Attributes", "")
                             
@@ -229,6 +225,7 @@ def find_target_session():
                             if target_time_start_obj <= s_time_obj <= target_time_end_obj:
                                 valid_shows.append({
                                     "sessionId": show.get("SessionId"),
+                                    "eventCode": current_event_code,   # <-- ADDED DYNAMIC EVENT CODE
                                     "dateCode": show.get("ShowDateCode"),
                                     "time": s_time_str,
                                     "attribute": s_attr,
@@ -309,7 +306,7 @@ def parse_layout(str_data):
 # =======================================================
 # PHASE 3: AUTO-LOCK / PAYMENT SNIPER 
 # =======================================================
-def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category):
+def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category, event_code):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
     
@@ -321,7 +318,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
-        "eventCode": EVENT_CODE,
+        "eventCode": event_code,
         "version": "18234",
         "platform": "ANDROID",
         "phone": PHONE,
@@ -441,7 +438,8 @@ def execute_snipe(session, row, seat_num, meta, categories):
     logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id}, Ticket Cat: {ticket_category})")
     
     # 1. Lock 
-    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category)
+    # 1. Lock 
+    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"])
     if not t_id: return False
     
     # 2. Pay
@@ -451,7 +449,7 @@ def execute_snipe(session, row, seat_num, meta, categories):
     # 3. Format Notification & Trigger Push
     qr_image_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
     hum_date = humanize_date(session["dateCode"])
-    msg = f"Row {row} Seat {seat_num} is locked and awaiting payment.\n\n{VENUE_CODE} {EVENT_CODE} {hum_date} {session['time']} {session['attribute']}"
+    msg = f"Row {row} Seat {seat_num} is locked and awaiting payment.\n\n{VENUE_CODE} {session['eventCode']} {hum_date} {session['time']} {session['attribute']}"
     
     trigger_ntfy(msg, attach_url=qr_image_url)
     return True
@@ -478,7 +476,7 @@ def main():
         
         # --- PHASE 1: Wait for Showtime ---
         if not target_session:
-            logger.info(f"    -> [PHASE 1] Scanning Venue API for Event {EVENT_CODE} matching constraints...")
+            logger.info("    -> [PHASE 1] Scanning Venue API across all events for matching constraints...")
             target_session = find_target_session()
             
             if not target_session:
