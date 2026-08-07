@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 DATES = ["20260811"]
 VENUE_CODE = "ALUC"
 EVENT_CODE = "ET00502689"
-TARGET_TICKET_CATEGORY = "0006" # "0006" for 3D
+TARGET_TICKET_CATEGORY = "0008" # "0006" for 3D
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 STATE_FILE = "sniped_state_4.json"
 
