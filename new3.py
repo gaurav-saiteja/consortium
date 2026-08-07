@@ -20,7 +20,13 @@ logger = logging.getLogger(__name__)
 DATES = ["20260811"]
 VENUE_CODE = "ALUC"
 EVENT_CODE = "ET00502689"
-TARGET_TICKET_CATEGORY = "0008" # "0006" for 3D
+#TARGET_TICKET_CATEGORY = "0008" # "0006" for 3D
+ROW_CATEGORY_MAP = {
+    "A": "0005",
+    "B": "0006", "C": "0006", "D": "0006", "E": "0006", "F": "0006", "G": "0006", "H": "0006", "I": "0006",
+    "J": "0007",
+    "K": "0008", "L": "0008", "M": "0008", "N": "0008", "O": "0008", "P": "0008", "Q": "0008", "R": "0008", "S": "0008"
+}
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 STATE_FILE = "sniped_state_4.json"
 
@@ -281,7 +287,7 @@ def parse_layout(str_data):
 # AUTO-LOCK / PAYMENT SNIPER FUNCTIONS
 # =======================================================
 
-def lock_seat(session_id, row_index, backend_seat, cat_code, area_id):
+def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
     
@@ -290,7 +296,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id):
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
         "sessionId": str(session_id),
-        "ticketCategory": TARGET_TICKET_CATEGORY,
+        "ticketCategory": ticket_category,
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
@@ -414,10 +420,12 @@ def execute_snipe(session, row, seat_num, meta, categories):
     if not cat_info: return False
     
     c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
-    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
+    # Fetch the exact ticket category for this specific row (default to "0008" if not found)
+    ticket_category = ROW_CATEGORY_MAP.get(row, "0008")
+    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id}, Ticket Cat: {ticket_category})")
     
     # 1. Lock 
-    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id)
+    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category)
     if not t_id: return False
     
     # 2. Pay
