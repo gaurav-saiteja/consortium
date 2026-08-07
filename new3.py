@@ -41,7 +41,7 @@ EMAIL = os.environ.get("BMS_EMAIL")
 PHONE = os.environ.get("BMS_PHONE")
 
 DESIRED_SEATS = {
-    "C": ["3"]
+    "C": ["03"]
 }
 
 # Track WARP State natively
