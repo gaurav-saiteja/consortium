@@ -196,7 +196,7 @@ def fetch_sessions():
             shows = resp.json().get("data", {}).get("showTimes", [])
             logger.info(f"    -> Found {len(shows)} total shows. Filtering for target time...")
             for show in shows:
-                if show.get("showTime") == "02:30 PM":
+                if show.get("showTime") == "08:00 AM":
                     s_attr = show.get("attributes", show.get("screenName", "Unknown Screen"))
                     
                     sessions.append({
