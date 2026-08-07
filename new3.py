@@ -41,7 +41,7 @@ PHONE = os.environ.get("BMS_PHONE")
 #}
 DESIRED_SEATS = {
     "K": ["28", "29"],
-    "F": ["28"],
+    "F": ["30"],
     "L": ["27"]
 }
 # Track WARP State natively
