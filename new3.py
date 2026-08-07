@@ -20,22 +20,30 @@ logger = logging.getLogger(__name__)
 DATES = ["20260808"]
 VENUE_CODE = "PRHN"
 EVENT_CODE = "ET00452034"
-TARGET_TICKET_CATEGORY = "0006" # "0006" for 2D, "0009" for 3D
-MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 STATE_FILE = "sniped_state_2.json"
+MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
+
+# --- NEW: SHOWTIME CONSTRAINTS ---
+TARGET_ATTRIBUTE = "DOLBY CINEMA"
+TARGET_TIME_START = "12:00 PM"
+TARGET_TIME_END = "03:00 PM"
+
+# --- PLAN A: ROW TO TICKET CATEGORY MAP ---
+ROW_CATEGORY_MAP = {
+    "A": "0005",
+    "B": "0006", "C": "0006", "D": "0006", "E": "0006", "F": "0006", "G": "0006", "H": "0006", "I": "0006",
+    "J": "0007",
+    "K": "0008", "L": "0008", "M": "0008", "N": "0008", "O": "0008", "P": "0008", "Q": "0008", "R": "0008", "S": "0008"
+}
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
 PHONE = os.environ.get("BMS_PHONE")
 
-# Define your desired seats here. 
-#DESIRED_SEATS = {
-#    "F": ["11", "12", "13"],
-#    "K": ["9", "8"] 
-#}
 DESIRED_SEATS = {
     "C": ["3"]
 }
+
 # Track WARP State natively
 USE_WARP = False
 PROXIES = {
@@ -95,7 +103,6 @@ def load_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f: 
-                # Load the list and convert to a set for fast lookups
                 return set(json.load(f))
         except json.JSONDecodeError: 
             logger.warning("Failed to decode local state JSON. Returning empty set.")
@@ -105,8 +112,6 @@ def save_state(sniped_set):
     logger.info("\n[GIT] State mutated. Saving sniped seat state to Git...")
     for attempt in range(3):
         quiet_git_pull()
-        
-        # Write the set back as a JSON list
         with open(STATE_FILE, "w") as f:
             json.dump(list(sniped_set), f, indent=2)
             
@@ -121,7 +126,6 @@ def save_state(sniped_set):
             logger.warning(f"Git push failed on attempt {attempt+1}/3. Retrying...")
             time.sleep(2)
         else:
-            logger.debug("No state changes detected by Git.")
             return
     logger.error("❌ Failed to push state updates after 3 attempts.")
 
@@ -136,8 +140,6 @@ def trigger_ntfy(message, attach_url=None):
             resp = requests.post("https://ntfy.sh/dolby_unblock", data=message.encode('utf-8'), headers=headers, timeout=10)
             if resp.status_code == 200:
                 logger.info(f"✅ Ntfy ping sent! Status: {resp.status_code}")
-            else:
-                logger.warning(f"⚠️ Ntfy ping returned unexpected status: {resp.status_code}")
         except Exception as e:
             logger.error(f"❌ Ntfy ping failed: {e}")
 
@@ -175,63 +177,92 @@ def make_bms_request(method, url, max_retries=3, **kwargs):
                 continue
     return None
 
-def fetch_sessions():
-    logger.info("==================================================")
-    logger.info("🚀 STARTING TARGETED SEAT SNIPER (CLEAN MODE)")
-    logger.info("==================================================\nFetching valid sessions...\n")
-    sessions = []
+# =======================================================
+# PHASE 1: SHOWTIME MONITORING (USING VENUE API)
+# =======================================================
+def find_target_session():
+    try:
+        # Convert strings like "12:00 PM" into datetime.time objects for mathematical comparison
+        target_time_start_obj = datetime.strptime(TARGET_TIME_START, "%I:%M %p").time()
+        target_time_end_obj = datetime.strptime(TARGET_TIME_END, "%I:%M %p").time()
+    except Exception as e:
+        logger.error(f"❌ Time parsing error in config (TARGET_TIME_START/END). Error: {e}")
+        return None
+
+    valid_shows = []
     
     for date_code in DATES:
-        logger.info(f"[NETWORK] Fetching sessions for Date: {date_code}...")
-        time.sleep(6)
-        url = f"https://in.bookmyshow.com/api/movies-data/seatlayout/v1/primary?eventCode={EVENT_CODE}&dateCode={date_code}&regionCode=HYD&venueCode={VENUE_CODE}"
-        
+        url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
         resp = make_bms_request('GET', url, headers=GET_HEADERS)
         if not resp or resp.status_code != 200: 
-            logger.error(f"    -> Status: {resp.status_code if resp else 'None'} | ❌ Failed to fetch sessions for date {date_code}.")
             continue
             
-        logger.info(f"    -> Status: {resp.status_code} (Using WARP: {USE_WARP})")
         try:
-            shows = resp.json().get("data", {}).get("showTimes", [])
-            logger.info(f"    -> Found {len(shows)} total shows. Filtering for target time...")
-            for show in shows:
-                if show.get("showTime") == "08:05 AM":
-                    s_attr = show.get("attributes", show.get("screenName", "Unknown Screen"))
-                    
-                    sessions.append({
-                        "sessionId": show["sessionId"], 
-                        "dateCode": show["showDateCode"], 
-                        "time": show["showTime"],
-                        "attribute": s_attr
-                    })
-        except Exception as e: 
-            logger.error(f"    -> ❌ Error parsing session JSON for {date_code}: {e}")
+            data = resp.json()
+            show_details_list = data.get("ShowDetails", [])
+            
+            for show_detail in show_details_list:
+                for event in show_detail.get("Event", []):
+                    # Check both parent and child level for the matching Movie Code
+                    parent_code = event.get("EventCode", "")
+                    for child in event.get("ChildEvents", []):
+                        child_code = child.get("EventCode", "")
+                        
+                        if EVENT_CODE not in [parent_code, child_code]:
+                            continue
+                            
+                        # If the movie matches, check the showtimes
+                        for show in child.get("ShowTimes", []):
+                            s_attr = show.get("Attributes", "")
+                            
+                            # 1. Constraint Check: Screen Attribute
+                            if TARGET_ATTRIBUTE.lower() not in s_attr.lower():
+                                continue
+                                
+                            s_time_str = show.get("ShowTime", "")
+                            try:
+                                s_time_obj = datetime.strptime(s_time_str, "%I:%M %p").time()
+                            except:
+                                continue
+                            
+                            # 2. Constraint Check: Time Range
+                            if target_time_start_obj <= s_time_obj <= target_time_end_obj:
+                                valid_shows.append({
+                                    "sessionId": show.get("SessionId"),
+                                    "dateCode": show.get("ShowDateCode"),
+                                    "time": s_time_str,
+                                    "attribute": s_attr,
+                                    "datetime_obj": s_time_obj,
+                                    "screen": show.get("ScreenName", "Unknown")
+                                })
+        except Exception as e:
+            logger.error(f"    -> ❌ Error parsing venue JSON for {date_code}: {e}")
             pass
             
-    logger.info(f"\n✅ Found a total of {len(sessions)} desired sessions to monitor.")
-    logger.info("==================================================\n")
-    return sessions
+    if valid_shows:
+        # Sort chronologically to pick the earliest show if multiple exist
+        valid_shows.sort(key=lambda x: x["datetime_obj"])
+        selected_show = valid_shows[0]
+        return selected_show
+        
+    return None
 
+# =======================================================
+# PHASE 2: LAYOUT PARSING
+# =======================================================
 def fetch_seat_layout(session_id):
-    logger.info(f"    -> [POST] https://services-in.bookmyshow.com/doTrans.aspx (Session: {session_id})")
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
     resp = make_bms_request('POST', url, headers=POST_HEADERS, data=payload)
-    if resp:
-        logger.info(f"    -> Status: {resp.status_code} (Using WARP: {USE_WARP})")
     if not resp or resp.status_code != 200: 
-        logger.warning(f"    -> ⚠️ Failed to fetch seat layout for {session_id}.")
         return ""
     try: 
         return resp.json().get("BookMyShow", {}).get("strData", "")
-    except Exception as e: 
-        logger.error(f"    -> ❌ Error parsing layout JSON for {session_id}: {e}")
+    except Exception: 
         return ""
 
 def parse_layout(str_data):
     if not str_data: return {}, {}, {}, 0
-    
     parts = str_data.split("||")
     header_data = parts[0]
     
@@ -276,19 +307,17 @@ def parse_layout(str_data):
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
 # =======================================================
-# AUTO-LOCK / PAYMENT SNIPER FUNCTIONS
+# PHASE 3: AUTO-LOCK / PAYMENT SNIPER 
 # =======================================================
-
-def lock_seat(session_id, row_index, backend_seat, cat_code, area_id):
+def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
-    
     
     payload = {
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
         "sessionId": str(session_id),
-        "ticketCategory": TARGET_TICKET_CATEGORY,
+        "ticketCategory": ticket_category, # INJECTED DYNAMICALLY (PLAN A)
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
@@ -377,14 +406,7 @@ def initiate_payment(trans_id, trans_uid):
         f"--{boundary}", 'Content-Disposition: form-data; name="strParam2"', '', '|ETICKET=Y|MTICKET=Y|',
         f"--{boundary}", 'Content-Disposition: form-data; name="strParam3"', '', EMAIL,
         f"--{boundary}", 'Content-Disposition: form-data; name="strParam4"', '', PHONE,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam5"', '', '',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam6"', '', '',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam7"', '', '',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam8"', '', '',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam9"', '', '',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam10"', '', '',
         f"--{boundary}", 'Content-Disposition: form-data; name="strFormat"', '', 'json',
-        f"--{boundary}", 'Content-Disposition: form-data; name="facebookBrowserId"', '', '',
         f"--{boundary}--", ''
     ]
     
@@ -412,10 +434,14 @@ def execute_snipe(session, row, seat_num, meta, categories):
     if not cat_info: return False
     
     c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
-    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
+    
+    # PLAN A: Fetch the exact ticket category for this specific row (default to 0008 if not found)
+    ticket_category = ROW_CATEGORY_MAP.get(row, "0008")
+    
+    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id}, Ticket Cat: {ticket_category})")
     
     # 1. Lock 
-    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id)
+    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category)
     if not t_id: return False
     
     # 2. Pay
@@ -424,103 +450,97 @@ def execute_snipe(session, row, seat_num, meta, categories):
     
     # 3. Format Notification & Trigger Push
     qr_image_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-    
     hum_date = humanize_date(session["dateCode"])
     msg = f"Row {row} Seat {seat_num} is locked and awaiting payment.\n\n{VENUE_CODE} {EVENT_CODE} {hum_date} {session['time']} {session['attribute']}"
     
     trigger_ntfy(msg, attach_url=qr_image_url)
-    
     return True
 
 # =======================================================
-# MAIN LOOP
+# MAIN LOOP STATE MACHINE
 # =======================================================
-
 def main():
     start_time = time.time()
     
-    target_sessions = fetch_sessions()
-    total_sessions = len(target_sessions)
-    if total_sessions == 0: 
-        logger.warning("No sessions found to monitor. Exiting.")
-        return
+    logger.info("==================================================")
+    logger.info("🚀 STARTING TARGETED SEAT SNIPER (WAIT-FOR-SHOW MODE)")
+    logger.info("==================================================\n")
 
-    # In-memory tracking to ensure we don't spam snipe requests for the same seat
     logger.info("[GIT] Loading initial state from GitHub repository...")
     sniped_seats_memory = load_state()
     logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
 
     cycle_count = 1
+    target_session = None
+
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        logger.info("==================================================")
-        logger.info(f"🔄 STARTING POLLING CYCLE {cycle_count}")
-        logger.info("==================================================\n")
+        logger.info(f"🔄 CYCLE {cycle_count}")
         
-        for index, session in enumerate(target_sessions, 1):
-            s_id = session["sessionId"]
+        # --- PHASE 1: Wait for Showtime ---
+        if not target_session:
+            logger.info(f"    -> [PHASE 1] Scanning Venue API for Event {EVENT_CODE} matching constraints...")
+            target_session = find_target_session()
             
-            hum_date = humanize_date(session["dateCode"])
-            logger.info(f"[{index}/{total_sessions}] Checking Session {s_id} (Date: {hum_date} Time: {session['time']})")
-            logger.info("    -> Sleeping for 23 seconds (Rate Limit Prevention)...")
-            time.sleep(23)
+            if not target_session:
+                logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 23 seconds...")
+                time.sleep(23)
+                cycle_count += 1
+                continue
+            else:
+                hum_date = humanize_date(target_session["dateCode"])
+                logger.info(f"\n    -> 🎉 MATCH FOUND! Locked onto Session {target_session['sessionId']} ({hum_date} @ {target_session['time']})")
+                logger.info("    -> 🚀 Switching to PHASE 2: Monitoring seat layout...")
+        
+        # --- PHASE 2: Monitor Layout of the found session ---
+        s_id = target_session["sessionId"]
+        logger.info(f"    -> [PHASE 2] Fetching Seat Layout for Session {s_id}. Sleeping 23 seconds to avoid rate limits...")
+        time.sleep(23)
+        
+        str_data = fetch_seat_layout(s_id)
+        if not str_data: 
+            cycle_count += 1
+            continue
             
-            str_data = fetch_seat_layout(s_id)
-            if not str_data: 
+        current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
+        logger.info(f"    -> Parse successful. Current Available Seats: {total_available}")
+        
+        state_mutated_this_session = False
+        desired_seat_found = False
+        
+        # Iterate strictly over DESIRED_SEATS to enforce ROW priority
+        for target_row, target_seat_list in DESIRED_SEATS.items():
+            if target_row not in current_seats:
                 continue
                 
-            current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
-            logger.info(f"    -> Parse successful. Current Available Seats: {total_available}")
+            available_in_row = current_seats[target_row]
             
-            # Track if we successfully sniped anything in this specific session to batch the Git save
-            state_mutated_this_session = False
-            desired_seat_found = False
+            # Iterate strictly over the array to enforce SEAT priority
+            for target_seat in target_seat_list:
+                seat_memory_key = f"{s_id}_{target_row}_{target_seat}"
+                
+                # If seat is available AND we haven't sniped it yet
+                if target_seat in available_in_row and seat_memory_key not in sniped_seats_memory:
+                    meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                    
+                    # --- PHASE 3: Snipe ---
+                    success = execute_snipe(target_session, target_row, target_seat, meta, categories_map)
+                    
+                    if success:
+                        desired_seat_found = True
+                        sniped_seats_memory.add(seat_memory_key)
+                        logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
+                        state_mutated_this_session = True
+                        time.sleep(1)
+
+        if not desired_seat_found:
+            logger.info("    -> ⚪ Desired seats are currently blocked/grey or sold out. Waiting for unblock...")
+
+        if state_mutated_this_session:
+            save_state(sniped_seats_memory)
             
-            # 1. Iterate strictly over DESIRED_SEATS to enforce ROW priority
-            for target_row, target_seat_list in DESIRED_SEATS.items():
-                
-                # If this entire row is sold out or blocked, skip it entirely
-                if target_row not in current_seats:
-                    continue
-                    
-                available_in_row = current_seats[target_row]
-                
-                # 2. Iterate strictly over the array to enforce SEAT priority
-                for target_seat in target_seat_list:
-                    seat_memory_key = f"{s_id}_{target_row}_{target_seat}"
-                    
-                    # If seat is available AND we haven't sniped it yet
-                    if target_seat in available_in_row and seat_memory_key not in sniped_seats_memory:
-                        
-                        meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                        
-                        # Lock it, generate QR, and push notification
-                        success = execute_snipe(session, target_row, target_seat, meta, categories_map)
-                        
-                        if success:
-                            # Add to in-memory blacklist so we never snipe it again
-                            desired_seat_found = True
-                            sniped_seats_memory.add(seat_memory_key)
-                            logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
-                            
-                            state_mutated_this_session = True
-                            
-                            # Required 1-second delay between successful lock requests
-                            time.sleep(1)
-
-            if not desired_seat_found:
-                logger.info("    -> ⚪ No desired seats found.\n")
-            else:
-                logger.info("") # Just an empty line for spacing if actions were taken
-
-            if not state_mutated_this_session:
-                logger.info("[STATE] Cycle finished. No state changes detected.\n")
-                            
-            # 3. Batch Git Save (Execute only ONCE per session after all snipes are complete)
-            if state_mutated_this_session:
-                save_state(sniped_seats_memory)
-
         cycle_count += 1
-        
+        print("") # Spacing
+
     logger.info("🏁 Max runtime reached. Script shutting down gracefully.")
         
 if __name__ == "__main__":
