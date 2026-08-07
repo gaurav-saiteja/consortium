@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 DATES = ["20260813"]
 VENUE_CODE = "PRHN"
 EVENT_CODE = "ET00502600"
+TARGET_TICKET_CATEGORY = "0009" # "0006" for 2D, "0009" for 3D
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 STATE_FILE = "sniped_state_2.json"
 
@@ -282,13 +283,12 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
     
-    padded_area = str(area_id).zfill(4) 
     
     payload = {
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
         "sessionId": str(session_id),
-        "ticketCategory": padded_area,
+        "ticketCategory": TARGET_TICKET_CATEGORY,
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
