@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 DATES = ["20260812"]
 VENUE_CODE = "PRHN"
-TARGET_TICKET_CATEGORY = "0009" # Hardcoded ticket category applies to all seats here
+TARGET_TICKET_CATEGORY = "0005" # Hardcoded ticket category applies to all seats here
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 STATE_FILE = "sniped_state_2.json"
 
