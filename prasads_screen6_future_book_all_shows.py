@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 DATES = ["20260813"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_11.json"
+STATE_FILE = "sniped_state_15.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TARGET_TICKET_CATEGORY = "0009" # "0006" for 2D, "0009" for 3D
 # --- NEW: SHOWTIME CONSTRAINTS ---
@@ -37,7 +37,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "F": ["32", "33", "34"]
+    "C": ["32", "33", "34"]
 }
 
 # Track WARP State natively (Thread-Safe)
