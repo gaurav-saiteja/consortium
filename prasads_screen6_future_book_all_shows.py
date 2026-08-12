@@ -145,17 +145,21 @@ def trigger_ntfy(message, attach_url=None):
 def toggle_warp():
     global USE_WARP, last_warp_toggle
     with warp_lock:
-        # If another thread already restarted WARP in the last 10 seconds, do nothing and return
+        # Prevent simultaneous toggles within the cooldown window
         if time.time() - last_warp_toggle < 10:
             return 
             
-        logger.info("    -> 🔌 Restarting Cloudflare WARP to bypass WAF block...")
-        subprocess.run(["warp-cli", "--accept-tos", "disconnect"], capture_output=True, check=False)
-        time.sleep(2)
-        subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-        time.sleep(5)
-        
-        USE_WARP = True
+        if USE_WARP:
+            logger.info("    -> 🔌 Disconnecting Cloudflare WARP (Switching to Direct IP)...")
+            subprocess.run(["warp-cli", "--accept-tos", "disconnect"], capture_output=True, check=False)
+            time.sleep(2)
+            USE_WARP = False
+        else:
+            logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
+            subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
+            time.sleep(5)
+            USE_WARP = True
+            
         last_warp_toggle = time.time()
 
 def make_bms_request(method, url, max_retries=25, **kwargs):
