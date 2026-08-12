@@ -26,17 +26,10 @@ STATE_FILE = "sniped_state_11.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TARGET_TICKET_CATEGORY = "0009" # "0006" for 2D, "0009" for 3D
 # --- NEW: SHOWTIME CONSTRAINTS ---
-TARGET_ATTRIBUTE = "DOLBY CINEMA"
+TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_TIME_START = "06:00 AM"
 TARGET_TIME_END = "11:59 PM"
 
-# --- PLAN A: ROW TO TICKET CATEGORY MAP ---
-ROW_CATEGORY_MAP = {
-    "A": "0005",
-    "B": "0006", "C": "0006", "D": "0006", "E": "0006", "F": "0006", "G": "0006", "H": "0006", "I": "0006",
-    "J": "0007",
-    "K": "0008", "L": "0008", "M": "0008", "N": "0008", "O": "0008", "P": "0008", "Q": "0008", "R": "0008", "S": "0008"
-}
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
@@ -44,7 +37,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "O": ["32", "33", "34"]
+    "D": ["32", "33", "34"]
 }
 
 # Track WARP State natively (Thread-Safe)
