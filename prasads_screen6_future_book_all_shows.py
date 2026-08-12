@@ -496,7 +496,7 @@ def execute_snipe(session, row, seat_num, meta, categories):
     
     c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
     
-    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id}, Ticket Cat: {ticket_category})")
+    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
     
     # 1. Lock 
     t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, session["eventCode"])
