@@ -377,7 +377,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
 # =======================================================
-def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category, event_code):
+def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, event_code):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
     
@@ -385,7 +385,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
         "sessionId": str(session_id),
-        "ticketCategory": ticket_category, 
+        "ticketCategory": TARGET_TICKET_CATEGORY,
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
@@ -503,12 +503,10 @@ def execute_snipe(session, row, seat_num, meta, categories):
     
     c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
     
-    ticket_category = ROW_CATEGORY_MAP.get(row, "0008")
-    
     logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id}, Ticket Cat: {ticket_category})")
     
     # 1. Lock 
-    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"])
+    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, session["eventCode"])
     if not t_id: return False
     
     # 2. Pay
