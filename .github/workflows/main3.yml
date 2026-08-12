@@ -56,4 +56,8 @@ jobs:
           curl -x socks5://127.0.0.1:40000 https://1.1.1.1/cdn-cgi/trace | grep warp || echo "WARP Test Failed, but continuing..."
 
       - name: Run Polling Script
+        env:
+            BMS_EMAIL: ${{ secrets.BMS_EMAIL }}
+            BMS_PHONE: ${{ secrets.BMS_PHONE }}
+            NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python -u prasads_screen6_future_book_all_shows.py
