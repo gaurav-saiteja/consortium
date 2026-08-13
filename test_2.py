@@ -24,7 +24,8 @@ DATES = ["20260814"]
 VENUE_CODE = "PRHN"
 STATE_FILE = "sniped_state_25.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
-TARGET_TICKET_CATEGORY = "0009" # "0006" for 2D, "0009" for 3D
+TICKET_CATEGORY_3D = "0009"
+TICKET_CATEGORY_2D = "0006"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_TIME_START = "06:00 AM"
@@ -217,6 +218,7 @@ def find_target_session():
                     for child in event.get("ChildEvents", []):
                         # Extract the event code dynamically (prioritize child code, fallback to parent)
                         current_event_code = child.get("EventCode", parent_code)
+                        current_event_dimension = child.get("EventDimension", "")
                         
                         for show in child.get("ShowTimes", []):
                             # --- NEW: Constraint Check 0: Strict Date Verification ---
@@ -244,6 +246,7 @@ def find_target_session():
                                 valid_shows.append({
                                     "sessionId": show.get("SessionId"),
                                     "eventCode": current_event_code,
+                                    "eventDimension": current_event_dimension,
                                     "dateCode": show.get("ShowDateCode"),
                                     "time": s_time_str,
                                     "attribute": s_attr,
@@ -374,7 +377,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
 # =======================================================
-def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, event_code):
+def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category, event_code):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
     
@@ -382,7 +385,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, event_code
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
         "sessionId": str(session_id),
-        "ticketCategory": TARGET_TICKET_CATEGORY,
+        "ticketCategory": ticket_category,
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
@@ -500,10 +503,15 @@ def execute_snipe(session, row, seat_num, meta, categories):
     
     c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
     
+    if "3D" in session.get("eventDimension", "").upper():
+        ticket_category = "0009"
+    else:
+        ticket_category = "0006"
+    
     logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
     
     # 1. Lock 
-    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, session["eventCode"])
+    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"])
     if not t_id: return False
     
     # 2. Pay
