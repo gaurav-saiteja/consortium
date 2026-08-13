@@ -561,7 +561,7 @@ def main():
         
         if not target_sessions:
             logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 23 seconds...")
-            time.sleep(23)
+            time.sleep(5)
         else:
             logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
             break
