@@ -56,29 +56,51 @@ PROXIES = {
     "https": "socks5://127.0.0.1:40000"
 }
 
-GET_HEADERS = {
-    "Host": "in.bookmyshow.com",
-    "Content-Type": "application/json",
-    "X-Latitude": "17.385044",
-    "X-Subregion-Code": "HYD",
-    "X-App-Code": "MOBAND2",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2110.1046 Mobile Safari/537.36",
-    "X-App-Version": "18.2.1",
-    "Accept-Encoding": "gzip, deflate",
-    "Connection": "keep-alive"
-}
+user_agents = [
+    "Mozilla/5.0 (Linux; U; Android 16;zh-cn; TB375FC Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.7389.0 MobileLenovoBrowser/9.2.7 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 8.1.0; vivo Y83) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Infinix X6532 Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; Lenovo YT-J706X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 15; SM-S908B Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; U; Android 13; zh-cn; M2012K11AC Build/TKQ1.221114.001) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.7049.79 Mobile Safari/537.36 XiaoMi/MiuiBrowser/20.25.1020805",
+    "Mozilla/5.0 (Linux; Android 16; 23129RN51X Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; 2210132C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; V2247) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; A001SH) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+]
 
-POST_HEADERS = {
-    "Host": "services-in.bookmyshow.com",
-    "X-Timeout": "10",
-    "X-Latitude": "17.385044",
-    "X-Subregion-Code": "HYD",
-    "X-App-Code": "MOBAND2",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2110.1046 Mobile Safari/537.36",
-    "X-App-Version": "18.2.1",
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Accept-Encoding": "gzip, deflate"
-}
+def generate_headers(is_post=False):
+    bms_id = f"1.4{random.randint(1000000, 9999999)}.{random.randint(1000000000000, 9999999999999)}"
+    device_id = "".join(random.choices("0123456789abcdef", k=16))
+    ua = random.choice(user_agents)
+    app_version_code = f"1{random.randint(10000, 99999)}"
+    app_version = f"18.{random.randint(10, 99)}.{random.randint(10, 99)}"
+    
+    host = "services-in.bookmyshow.com" if is_post else "in.bookmyshow.com"
+    
+    return {
+        "Host": host,
+        "X-Bms-Id": bms_id,
+        "X-Device-Id": device_id,
+        "X-Latitude": "17.385044",
+        "X-Subregion-Code": "HYD",
+        "X-App-Code": "MOBAND2",
+        "User-Agent": ua,
+        "X-App-Version-Code": app_version_code,
+        "X-Longitude": "78.48667",
+        "X-Platform": "AND",
+        "X-Region-Code": "HYD",
+        "X-Region-Slug": "hyderabad",
+        "X-Platform-Code": "ANDROID",
+        "X-App-Version": app_version,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept-Encoding": "gzip, deflate"
+    }
 
 def humanize_date(date_str):
     if not date_str or len(date_str) != 8:
@@ -213,7 +235,7 @@ def find_target_session():
     
     for date_code in DATES:
         url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
-        resp = make_bms_request('GET', url, network_state=network_state, headers=GET_HEADERS)
+        resp = make_bms_request('GET', url, network_state=network_state, headers=generate_headers(is_post=False))
         logger.info(f"{resp.status_code}")
         if not resp or resp.status_code != 200: 
             continue
@@ -282,7 +304,7 @@ def find_target_session():
 def fetch_seat_layout(session_id, network_state):
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
-    resp = make_bms_request('POST', url, network_state=network_state, headers=POST_HEADERS, data=payload)
+    resp = make_bms_request('POST', url, network_state=network_state, headers=generate_headers(is_post=True), data=payload)
     logger.info(f"{resp.status_code}")
     if not resp or resp.status_code != 200: 
         return ""
