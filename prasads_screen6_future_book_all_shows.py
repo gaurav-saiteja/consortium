@@ -342,7 +342,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
 
         str_data = fetch_seat_layout(s_id)
         if not str_data:
-            time.sleep(1)
+            time.sleep(2)
             continue
             
         current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
@@ -367,9 +367,9 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                         with state_lock:
                             sniped_memory.add(seat_memory_key)
                         logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
-                        time.sleep(1)
+                        time.sleep(2)
                         
-        time.sleep(1)
+        time.sleep(2)
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
