@@ -54,10 +54,17 @@ DESIRED_SEATS = {
     "R": ["29", "30", "31"]
 }
 
-# Track WARP State natively (Thread-Safe)
-USE_WARP = False
-warp_lock = threading.Lock()
-last_warp_toggle = 0
+# Parse Proxy Pool from GitHub Secrets
+PROXY_POOL = []
+raw_proxies = os.environ.get("PROXY_LIST", "")
+if raw_proxies:
+    for line in raw_proxies.strip().split("\n"):
+        parts = line.strip().split(":")
+        if len(parts) == 4:
+            ip, port, user, pwd = parts
+            # curl_cffi requires the http://username:password@ip:port format
+            PROXY_POOL.append(f"http://{user}:{pwd}@{ip}:{port}")
+            
 
 PROXIES = {
     "http": "socks5://127.0.0.1:40000",
@@ -156,29 +163,24 @@ def trigger_ntfy(message, attach_url=None):
         except Exception as e:
             logger.error(f"❌ Ntfy ping failed: {e}")
 
-def toggle_warp():
-    global USE_WARP, last_warp_toggle
-    with warp_lock:
-        # Prevent simultaneous toggles within the cooldown window
-        if time.time() - last_warp_toggle < 10:
-            return 
-            
-        if USE_WARP:
-            logger.info("    -> 🔌 Disconnecting Cloudflare WARP (Switching to Direct IP)...")
-            subprocess.run(["warp-cli", "--accept-tos", "disconnect"], capture_output=True, check=False)
-            time.sleep(2)
-            USE_WARP = False
-        else:
-            logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
-            subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-            time.sleep(5)
-            USE_WARP = True
-            
-        last_warp_toggle = time.time()
+def start_warp():
+    logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
+    subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
+    time.sleep(5)
 
-def make_bms_request(method, url, max_retries=5, **kwargs):
+def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
     for attempt in range(1, max_retries + 1):
-        current_proxies = PROXIES if USE_WARP else None
+        current_proxies = None
+        
+        # State Machine: 0 (Raw IP), 1 (WARP), 2 (Pool Proxy)
+        if network_state["state"] == 1:
+            current_proxies = PROXIES
+        elif network_state["state"] == 2:
+            if not network_state.get("pool_proxy") and PROXY_POOL:
+                proxy_url = random.choice(PROXY_POOL)
+                network_state["pool_proxy"] = {"http": proxy_url, "https": proxy_url}
+            current_proxies = network_state.get("pool_proxy")
+
         try:
             if method.upper() == 'GET':
                 resp = cffi_requests.get(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
@@ -186,13 +188,17 @@ def make_bms_request(method, url, max_retries=5, **kwargs):
                 resp = cffi_requests.post(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
             
             if resp.status_code in [429, 403]:
-                logger.warning(f"    -> 🚧 WAF Block (HTTP {resp.status_code}) on {method} request. (Attempt {attempt}/{max_retries})")
+                logger.warning(f"    -> 🚧 WAF Block (HTTP {resp.status_code}) on {method}. Thread jumping network state. (Attempt {attempt}/{max_retries})")
                 if attempt < max_retries:
-                    toggle_warp()
+                    # Jumping Loop: 0 -> 1 -> 2 -> 0
+                    network_state["state"] = (network_state["state"] + 1) % 3
+                    if network_state["state"] == 2:
+                        network_state["pool_proxy"] = None # Force a new random proxy to be picked next loop
+                    time.sleep(1)
                     continue
             return resp
         except Exception as e:
-            logger.error(f"🌐 Request error on {method} (Attempt {attempt}/{max_retries}): {e}")
+            logger.error(f"🌐 Request error on {method} (State {network_state['state']}, Attempt {attempt}/{max_retries}): {e}")
             if attempt < max_retries: 
                 time.sleep(3)
                 continue
@@ -202,6 +208,7 @@ def make_bms_request(method, url, max_retries=5, **kwargs):
 # PHASE 1: SHOWTIME MONITORING (USING VENUE API)
 # =======================================================
 def find_target_session():
+    network_state = {"state": 0, "pool_proxy": None} # <-- Add this at the very top of the function
     try:
         # Convert strings like "12:00 PM" into datetime.time objects for mathematical comparison
         target_time_start_obj = datetime.strptime(TARGET_TIME_START, "%I:%M %p").time()
@@ -214,7 +221,7 @@ def find_target_session():
     
     for date_code in DATES:
         url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
-        resp = make_bms_request('GET', url, headers=GET_HEADERS)
+        resp = make_bms_request('GET', url, network_state=network_state, headers=GET_HEADERS)
         if not resp or resp.status_code != 200: 
             continue
             
@@ -280,10 +287,10 @@ def find_target_session():
 # =======================================================
 # PHASE 2 & 3: THREAD WORKER / LAYOUT PARSING
 # =======================================================
-def fetch_seat_layout(session_id):
+def fetch_seat_layout(session_id, network_state):
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
-    resp = make_bms_request('POST', url, headers=POST_HEADERS, data=payload)
+    resp = make_bms_request('POST', url, network_state=network_state, headers=POST_HEADERS, data=payload)
     if not resp or resp.status_code != 200: 
         return ""
     try: 
@@ -337,6 +344,7 @@ def parse_layout(str_data):
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
 def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
+    network_state = {"state": 1, "pool_proxy": None} # <-- Add this at the top (Threads start on WARP)
     s_id = session["sessionId"]
     logger.info(f"    -> [THREAD] 🚀 Started monitoring Session {s_id} ({session['time']})")
     
@@ -357,7 +365,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
             break
         # -----------------------------
 
-        str_data = fetch_seat_layout(s_id)
+        str_data = fetch_seat_layout(s_id, network_state)
         if not str_data:
             time.sleep(2)
             continue
@@ -378,7 +386,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                 
                 if target_seat in available_in_row and not already_sniped:
                     meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                    success = execute_snipe(session, target_row, target_seat, meta, categories_map)
+                    success = execute_snipe(session, target_row, target_seat, meta, categories_map, network_state)
                     
                     if success:
                         with state_lock:
@@ -391,7 +399,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
 # =======================================================
-def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category, event_code):
+def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category, event_code, network_state):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
     
@@ -429,7 +437,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
     }
 
     data_str = json.dumps(payload, separators=(',', ':'))
-    resp = make_bms_request('POST', url, headers=headers, data=data_str.encode('utf-8'))
+    resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=data_str.encode('utf-8'))
     
     if resp and resp.status_code == 200:
         try:
@@ -445,7 +453,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
     logger.error("    -> 🔴 [SNIPER] FAILED to lock seat.")
     return None, None
 
-def initiate_payment(trans_id, trans_uid):
+def initiate_payment(trans_id, trans_uid, network_state):
     logger.info(f"    -> 💸 [SNIPER] Request 2: Initiating payment intent for {trans_id}...")
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     
@@ -493,7 +501,7 @@ def initiate_payment(trans_id, trans_uid):
     ]
     
     payload_str = '\r\n'.join(form_fields)
-    resp = make_bms_request('POST', url, headers=headers, data=payload_str.encode('utf-8'))
+    resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=payload_str.encode('utf-8'))
     
     if resp and resp.status_code == 200:
         try:
@@ -511,7 +519,7 @@ def initiate_payment(trans_id, trans_uid):
     logger.error("    -> 🔴 [SNIPER] FAILED to generate payment intent.")
     return None
 
-def execute_snipe(session, row, seat_num, meta, categories):
+def execute_snipe(session, row, seat_num, meta, categories, network_state):
     cat_info = categories.get(meta["block_code"])
     if not cat_info: return False
     
@@ -526,11 +534,11 @@ def execute_snipe(session, row, seat_num, meta, categories):
     logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id}, Ticket Cat: {ticket_category})")
     
     # 1. Lock 
-    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"])
+    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], network_state)
     if not t_id: return False
     
     # 2. Pay
-    upi_intent = initiate_payment(t_id, t_uid)
+    upi_intent = initiate_payment(t_id, t_uid, network_state)
     if not upi_intent: return False
     
     # 3. Format Notification & Trigger Push
@@ -580,15 +588,8 @@ def main():
         return
 
     # --- PROXY WARMUP: Activate WARP exactly before threading ---
-    global USE_WARP
-    if not USE_WARP:
-        logger.info("    -> 🛡️ Pre-warming WARP Proxy before spawning threads...")
-        with warp_lock:
-            subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-            time.sleep(5)
-            USE_WARP = True
-            global last_warp_toggle
-            last_warp_toggle = time.time()
+    logger.info("    -> 🛡️ Pre-warming WARP Proxy before spawning threads...")
+    start_warp()
         
     # --- PHASE 2 & 3: Parallel Threading ---
     logger.info(f"    -> 🚀 Spawning {len(target_sessions)} parallel threads...")
