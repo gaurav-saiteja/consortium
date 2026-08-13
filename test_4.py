@@ -177,8 +177,13 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
             if resp.status_code in [429, 403]:
                 logger.warning(f"    -> 🚧 WAF Block (HTTP {resp.status_code}) on {method}. Thread jumping network state. (Attempt {attempt}/{max_retries})")
                 if attempt < max_retries:
-                    # Jumping Loop: 0 -> 1 -> 2 -> 0
-                    network_state["state"] = (network_state["state"] + 1) % 3
+                    max_states = network_state.get("max_states", 3)
+                    
+                    # Jumping Loop:
+                    # If max_states=2: 0 -> 1 -> 0
+                    # If max_states=3: 0 -> 1 -> 2 -> 0
+                    network_state["state"] = (network_state["state"] + 1) % max_states
+                    
                     if network_state["state"] == 2:
                         network_state["pool_proxy"] = None # Force a new random proxy to be picked next loop
                     time.sleep(1)
@@ -195,7 +200,7 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
 # PHASE 1: SHOWTIME MONITORING (USING VENUE API)
 # =======================================================
 def find_target_session():
-    network_state = {"state": 0, "pool_proxy": None} # <-- Add this at the very top of the function
+    network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
     try:
         # Convert strings like "12:00 PM" into datetime.time objects for mathematical comparison
         target_time_start_obj = datetime.strptime(TARGET_TIME_START, "%I:%M %p").time()
@@ -332,7 +337,11 @@ def parse_layout(str_data):
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
 def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
-    network_state = {"state": 1, "pool_proxy": None} # <-- Add this at the top (Threads start on WARP)
+    layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
+    
+    # Sniping (Lock/Pay) can access the Proxy Pool (2)
+    snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 3}
+    
     s_id = session["sessionId"]
     logger.info(f"    -> [THREAD] 🚀 Started monitoring Session {s_id} ({session['time']})")
     
@@ -353,7 +362,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
             break
         # -----------------------------
 
-        str_data = fetch_seat_layout(s_id, network_state)
+        str_data = fetch_seat_layout(s_id, layout_network_state)
         if not str_data:
             time.sleep(2)
             continue
@@ -374,7 +383,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                 
                 if target_seat in available_in_row and not already_sniped:
                     meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                    success = execute_snipe(session, target_row, target_seat, meta, categories_map, network_state)
+                    success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
                     
                     if success:
                         with state_lock:
