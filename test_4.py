@@ -415,8 +415,13 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                             sniped_memory.add(seat_memory_key)
                         logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
                         time.sleep(2)
-                    elif target_seat not in available_in_row:
-                     logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
+                    else:
+                        # If the seat is available but the execute_snipe function fails silently
+                        logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
+                        
+                elif target_seat not in available_in_row:
+                    # PROPERLY ALIGNED: This will now run if the outer IF is false
+                    logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
                         
         time.sleep(2)
 
