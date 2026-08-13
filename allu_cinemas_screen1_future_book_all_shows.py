@@ -20,9 +20,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260813"]
+DATES = ["20260814"]
 VENUE_CODE = "ALUC"
-STATE_FILE = "sniped_state_13.json"
+STATE_FILE = "sniped_state_23.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 
 # --- NEW: SHOWTIME CONSTRAINTS ---
