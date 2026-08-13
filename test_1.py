@@ -51,7 +51,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "R": ["29", "30", "31"]
+    "S": ["02", "03", "04"]
 }
 
 # Parse Proxy Pool from GitHub Secrets
