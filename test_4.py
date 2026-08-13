@@ -391,6 +391,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
             continue
             
         current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
+        logger.info(f"    -> [POLL] Session {s_id} | Total available seats: {total_available}")
         
         for target_row, target_seat_list in DESIRED_SEATS.items():
             if target_row not in current_seats:
@@ -413,6 +414,8 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                             sniped_memory.add(seat_memory_key)
                         logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
                         time.sleep(2)
+                    elif target_seat not in available_in_row:
+                     logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
                         
         time.sleep(2)
 
