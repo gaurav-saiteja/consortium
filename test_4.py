@@ -395,6 +395,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
         
         for target_row, target_seat_list in DESIRED_SEATS.items():
             if target_row not in current_seats:
+                logger.info(f"       [-] Row {target_row} not available yet.")
                 continue
                 
             available_in_row = current_seats[target_row]
