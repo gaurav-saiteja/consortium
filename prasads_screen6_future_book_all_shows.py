@@ -20,14 +20,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260813"]
+DATES = ["20260814"]
 VENUE_CODE = "PRHN"
 STATE_FILE = "sniped_state_25.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TARGET_TICKET_CATEGORY = "0009" # "0006" for 2D, "0009" for 3D
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
-TARGET_TIME_START = "10:00 PM"
+TARGET_TIME_START = "06:00 AM"
 TARGET_TIME_END = "11:59 PM"
 
 
