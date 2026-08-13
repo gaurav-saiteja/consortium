@@ -169,8 +169,10 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
         try:
             if method.upper() == 'GET':
                 resp = cffi_requests.get(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
+                logger.info(f"{resp.status_code}")
             else:
                 resp = cffi_requests.post(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
+                logger.info(f"{resp.status_code}")
             
             if resp.status_code in [429, 403]:
                 logger.warning(f"    -> 🚧 WAF Block (HTTP {resp.status_code}) on {method}. Thread jumping network state. (Attempt {attempt}/{max_retries})")
@@ -207,6 +209,7 @@ def find_target_session():
     for date_code in DATES:
         url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
         resp = make_bms_request('GET', url, network_state=network_state, headers=GET_HEADERS)
+        logger.info(f"{resp.status_code}")
         if not resp or resp.status_code != 200: 
             continue
             
@@ -275,6 +278,7 @@ def fetch_seat_layout(session_id, network_state):
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
     resp = make_bms_request('POST', url, network_state=network_state, headers=POST_HEADERS, data=payload)
+    logger.info(f"{resp.status_code}")
     if not resp or resp.status_code != 200: 
         return ""
     try: 
@@ -422,7 +426,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
 
     data_str = json.dumps(payload, separators=(',', ':'))
     resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=data_str.encode('utf-8'))
-    
+    logger.info(f"{resp.status_code}")
     if resp and resp.status_code == 200:
         try:
             r_json = resp.json()
@@ -486,7 +490,7 @@ def initiate_payment(trans_id, trans_uid, network_state):
     
     payload_str = '\r\n'.join(form_fields)
     resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=payload_str.encode('utf-8'))
-    
+    logger.info(f"{resp.status_code}")
     if resp and resp.status_code == 200:
         try:
             data = resp.json()
