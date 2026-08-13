@@ -31,11 +31,18 @@ TARGET_TIME_START = "06:00 AM"
 TARGET_TIME_END = "11:59 PM"
 
 # --- PLAN A: ROW TO TICKET CATEGORY MAP ---
-ROW_CATEGORY_MAP = {
+ROW_CATEGORY_MAP_3D = {
     "A": "0005",
     "B": "0006", "C": "0006", "D": "0006", "E": "0006", "F": "0006", "G": "0006", "H": "0006", "I": "0006",
     "J": "0007",
     "K": "0008", "L": "0008", "M": "0008", "N": "0008", "O": "0008", "P": "0008", "Q": "0008", "R": "0008", "S": "0008"
+}
+
+ROW_CATEGORY_MAP_2D = {
+    "A": "0001",
+    "B": "0002", "C": "0002", "D": "0002", "E": "0002", "F": "0002", "G": "0002", "H": "0002", "I": "0002",
+    "J": "0003",
+    "K": "0004", "L": "0004", "M": "0004", "N": "0004", "O": "0004", "P": "0004", "Q": "0004", "R": "0004", "S": "0004"
 }
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
@@ -220,6 +227,8 @@ def find_target_session():
                     for child in event.get("ChildEvents", []):
                         # Extract the event code dynamically (prioritize child code, fallback to parent)
                         current_event_code = child.get("EventCode", parent_code)
+                        # --> ADD THIS NEW LINE:
+                        current_event_dimension = child.get("EventDimension", "")
                         
                         for show in child.get("ShowTimes", []):
                             # --- NEW: Constraint Check 0: Strict Date Verification ---
@@ -247,6 +256,7 @@ def find_target_session():
                                 valid_shows.append({
                                     "sessionId": show.get("SessionId"),
                                     "eventCode": current_event_code,
+                                    "eventDimension": current_event_dimension,  # --> ADD THIS NEW LINE
                                     "dateCode": show.get("ShowDateCode"),
                                     "time": s_time_str,
                                     "attribute": s_attr,
@@ -503,7 +513,11 @@ def execute_snipe(session, row, seat_num, meta, categories):
     
     c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
     
-    ticket_category = ROW_CATEGORY_MAP.get(row, "0008")
+    # --> REPLACE WITH THIS NEW LOGIC:
+    if "3D" in session.get("eventDimension", "").upper():
+        ticket_category = ROW_CATEGORY_MAP_3D.get(row, "0008") # 0008 is default 3D Gold
+    else:
+        ticket_category = ROW_CATEGORY_MAP_2D.get(row, "0004") # 0004 is default 2D Gold
     
     logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id}, Ticket Cat: {ticket_category})")
     
