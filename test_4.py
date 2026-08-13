@@ -423,7 +423,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                     # PROPERLY ALIGNED: This will now run if the outer IF is false
                     logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
                         
-        time.sleep(2)
+        time.sleep(6)
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
