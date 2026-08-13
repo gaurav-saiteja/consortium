@@ -386,7 +386,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
 
         str_data = fetch_seat_layout(s_id, layout_network_state)
         if not str_data:
-            logger.info("no str_data)
+            logger.info("no str_data")
             time.sleep(2)
             continue
             
