@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 DATES = ["20260814"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_65.json"
+STATE_FILE = "sniped_state_75.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
-TARGET_ATTRIBUTE = "PCX HDR by BARCO"
+TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_TIME_START = "06:00 AM"
 TARGET_TIME_END = "11:00 AM"
 
@@ -38,7 +38,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "N": ["3", "4", "5"]
+    "N": ["13", "14", "15"]
 }
 
 PROXY_POOL = []
@@ -395,7 +395,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
         "sessionId": str(session_id),
-        "ticketCategory": "0005",
+        "ticketCategory": "0006",
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
