@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260813"]
+DATES = ["20260814"]
 VENUE_CODE = "PRHN"
 STATE_FILE = "sniped_state_65.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -29,7 +29,7 @@ TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX HDR by BARCO"
 TARGET_TIME_START = "06:00 AM"
-TARGET_TIME_END = "07:00 AM"
+TARGET_TIME_END = "11:00 AM"
 
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
@@ -38,7 +38,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "N": ["3", "4", "5", "6", "7"]
+    "N": ["3", "4", "5"]
 }
 
 PROXY_POOL = []
