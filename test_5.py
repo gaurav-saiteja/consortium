@@ -31,6 +31,10 @@ TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_TIME_START = "06:00 AM"
 TARGET_TIME_END = "07:00 AM"
 
+# --- NEW: CONTINUOUS LOCKING CONFIG ---
+MAX_LOCK_ATTEMPTS = 5
+COOLDOWN_SECONDS = 600 # 10 minutes (Time to wait before trying to re-lock the same seat)
+
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
@@ -130,17 +134,21 @@ def load_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f: 
-                return set(json.load(f))
+                data = json.load(f)
+                # Backward compatibility: Convert old list to new dictionary format
+                if isinstance(data, list):
+                    return {item: 1 for item in data}
+                return data if isinstance(data, dict) else {}
         except json.JSONDecodeError: 
-            logger.warning("Failed to decode local state JSON. Returning empty set.")
-    return set()
+            logger.warning("Failed to decode local state JSON. Returning empty dictionary.")
+    return {}
 
 def save_state(sniped_set):
     logger.info("\n[GIT] State mutated. Saving sniped seat state to Git...")
     for attempt in range(3):
         quiet_git_pull()
         with open(STATE_FILE, "w") as f:
-            json.dump(list(sniped_set), f, indent=2)
+            json.dump(sniped_set, f, indent=2) # sniped_set is now a dictionary
             
         subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
@@ -360,30 +368,15 @@ def parse_layout(str_data):
 
 def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
     layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
-    
-    # Sniping (Lock/Pay) can access the Proxy Pool (2)
     snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 3}
     
     s_id = session["sessionId"]
     logger.info(f"    -> [THREAD] 🚀 Started monitoring Session {s_id} ({session['time']})")
     
-    # Calculate the total number of target seats for a single session
-    total_desired_seats = sum(len(seats) for seats in DESIRED_SEATS.values())
+    # NEW: Track when a seat was last locked by this specific thread to prevent cache phantoms
+    cooldown_memory = {}
     
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        # --- NEW: EARLY EXIT CHECK ---
-        sniped_count = 0
-        with state_lock:
-            for target_row, target_seat_list in DESIRED_SEATS.items():
-                for target_seat in target_seat_list:
-                    if f"{s_id}_{target_row}_{target_seat}" in sniped_memory:
-                        sniped_count += 1
-                        
-        if sniped_count >= total_desired_seats:
-            logger.info(f"    -> [THREAD] 🎯 All target seats sniped for Session {s_id}! Thread exiting.")
-            break
-        # -----------------------------
-
         str_data = fetch_seat_layout(s_id, layout_network_state)
         if not str_data:
             logger.info("no str_data")
@@ -403,24 +396,40 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
             for target_seat in target_seat_list:
                 seat_memory_key = f"{s_id}_{target_row}_{target_seat}"
                 
+                # Fetch current lock count from global state
                 with state_lock:
-                    already_sniped = seat_memory_key in sniped_memory
+                    lock_count = sniped_memory.get(seat_memory_key, 0)
                 
-                if target_seat in available_in_row and not already_sniped:
-                    meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                    success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
+                # Check cooldown
+                last_locked_time = cooldown_memory.get(seat_memory_key, 0)
+                cooldown_passed = (time.time() - last_locked_time) > COOLDOWN_SECONDS
+
+                if target_seat in available_in_row:
+                    if lock_count < MAX_LOCK_ATTEMPTS and cooldown_passed:
+                        meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                        success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
+                        
+                        if success:
+                            with state_lock:
+                                # Increment the lock count
+                                sniped_memory[seat_memory_key] = sniped_memory.get(seat_memory_key, 0) + 1
+                            
+                            # Update thread-local cooldown timer
+                            cooldown_memory[seat_memory_key] = time.time()
+                            logger.info(f"✅ Successfully sniped: {seat_memory_key} (Attempt {lock_count + 1}/{MAX_LOCK_ATTEMPTS})")
+                            time.sleep(2)
+                        else:
+                            logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
                     
-                    if success:
-                        with state_lock:
-                            sniped_memory.add(seat_memory_key)
-                        logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
-                        time.sleep(2)
-                    else:
-                        # If the seat is available but the execute_snipe function fails silently
-                        logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
+                    elif lock_count >= MAX_LOCK_ATTEMPTS:
+                        # Optional: You can silence this logger if it gets too spammy
+                        pass 
+                    
+                    elif not cooldown_passed:
+                        # Optional: You can silence this logger if it gets too spammy
+                        pass
                         
                 elif target_seat not in available_in_row:
-                    # PROPERLY ALIGNED: This will now run if the outer IF is false
                     logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
                         
         time.sleep(6)
