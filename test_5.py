@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 DATES = ["20260814"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_75.json"
+STATE_FILE = "sniped_state_85.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
@@ -33,7 +33,7 @@ TARGET_TIME_END = "07:00 AM"
 
 # --- NEW: CONTINUOUS LOCKING CONFIG ---
 MAX_LOCK_ATTEMPTS = 5
-COOLDOWN_SECONDS = 600 # 10 minutes (Time to wait before trying to re-lock the same seat)
+COOLDOWN_SECONDS = 240
 
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
