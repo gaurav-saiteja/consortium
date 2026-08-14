@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260814"]
+DATES = ["20260816"]
 VENUE_CODE = "PRHN"
 STATE_FILE = "sniped_state_85.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -29,7 +29,7 @@ TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_TIME_START = "06:00 AM"
-TARGET_TIME_END = "07:00 AM"
+TARGET_TIME_END = "09:00 AM"
 
 # --- NEW: CONTINUOUS LOCKING CONFIG ---
 MAX_LOCK_ATTEMPTS = 5
@@ -42,7 +42,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "N": ["13", "14", "15"]
+    "N": ["3", "4", "5"]
 }
 
 PROXY_POOL = []
@@ -615,7 +615,7 @@ def main():
         
         if not target_sessions:
             logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 23 seconds...")
-            time.sleep(5)
+            time.sleep(8)
         else:
             logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
             break
