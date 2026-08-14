@@ -432,7 +432,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                 elif target_seat not in available_in_row:
                     logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
                         
-        time.sleep(6)
+        time.sleep(20)
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
