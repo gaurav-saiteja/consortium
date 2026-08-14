@@ -127,6 +127,8 @@ def quiet_git_pull():
 def quiet_git_push():
     logger.debug("[GIT] Executing Git push...")
     res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True, check=False)
+    if res.returncode != 0:
+        logger.warning(f"[GIT] Push failed. Stderr: {res.stderr.strip()}")
     return res.returncode == 0
 
 def load_state():
@@ -144,18 +146,21 @@ def load_state():
             logger.warning("Failed to decode local state JSON. Returning empty dictionary.")
     return {}
 
-def save_state(sniped_set):
+def save_state(sniped_dict):
     logger.info("\n[GIT] State mutated. Saving sniped seat state to Git...")
     for attempt in range(3):
         quiet_git_pull()
         with open(STATE_FILE, "w") as f:
-            json.dump(sniped_set, f, indent=2) # sniped_set is now a dictionary
+            json.dump(sniped_dict, f, indent=2)
             
         subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
         
         if STATE_FILE in status.stdout:
-            subprocess.run(["git", "commit", "-m", "Update sniped seats state"], capture_output=True, check=False)
+            commit_res = subprocess.run(["git", "commit", "-m", "Update sniped seats state"], capture_output=True, text=True, check=False)
+            if commit_res.returncode != 0:
+                logger.warning(f"[GIT] Commit warning/error: {commit_res.stderr.strip()}")
+                
             if quiet_git_push(): 
                 logger.info("[STATE] ✅ State successfully saved and pushed to remote.")
                 return
@@ -164,6 +169,20 @@ def save_state(sniped_set):
         else:
             return
     logger.error("❌ Failed to push state updates after 3 attempts.")
+
+def state_saver_worker(sniped_memory, state_lock, mutated_flag, start_time):
+    logger.info("    -> [THREAD] 💾 State saver background thread active.")
+    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        time.sleep(15) # Check for mutations every 15 seconds
+        
+        if mutated_flag[0]: # If the dirty flag was flipped by a sniper thread
+            # 1. Acquire lock just long enough to make a deep copy and reset the flag
+            with state_lock:
+                local_copy = dict(sniped_memory)
+                mutated_flag[0] = False
+                
+            # 2. Release lock immediately, THEN do the slow Git operations
+            save_state(local_copy)
 
 def trigger_ntfy(message, attach_url=None):
     logger.info(f"🔔 ALERTING VIA NTFY:\n{message}")
@@ -367,7 +386,7 @@ def parse_layout(str_data):
     total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
-def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
+def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mutated_flag):
     layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
     snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 3}
     
@@ -414,6 +433,8 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                             with state_lock:
                                 # Increment the lock count
                                 sniped_memory[seat_memory_key] = sniped_memory.get(seat_memory_key, 0) + 1
+                                # --- NEW: Tell the background thread to save ---
+                                mutated_flag[0] = True 
                             
                             # Update thread-local cooldown timer
                             cooldown_memory[seat_memory_key] = time.time()
@@ -605,6 +626,7 @@ def main():
     logger.info("[GIT] Loading initial state from GitHub repository...")
     sniped_seats_memory = load_state()
     state_lock = threading.Lock()
+    mutated_flag = [False] # Shared dirty flag passed to all threads
     logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
 
     # --- PHASE 1: Wait for Showtimes to list ---
@@ -615,7 +637,7 @@ def main():
         target_sessions = find_target_session()
         
         if not target_sessions:
-            logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 23 seconds...")
+            logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 8 seconds...")
             time.sleep(8)
         else:
             logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
@@ -630,12 +652,23 @@ def main():
     start_warp()
         
     # --- PHASE 2 & 3: Parallel Threading ---
-    logger.info(f"    -> 🚀 Spawning {len(target_sessions)} parallel threads...")
+    logger.info(f"    -> 🚀 Spawning {len(target_sessions)} sniper threads + 1 state saver thread...")
     threads = []
+    
+    # 1. Spawn the dedicated State Saver thread
+    saver_t = threading.Thread(
+        target=state_saver_worker,
+        args=(sniped_seats_memory, state_lock, mutated_flag, start_time)
+    )
+    saver_t.daemon = True
+    saver_t.start()
+    threads.append(saver_t)
+
+    # 2. Spawn the Sniper threads
     for session in target_sessions:
         t = threading.Thread(
             target=monitor_and_snipe_worker, 
-            args=(session, sniped_seats_memory, state_lock, start_time)
+            args=(session, sniped_seats_memory, state_lock, start_time, mutated_flag)
         )
         t.daemon = True
         t.start()
@@ -648,8 +681,8 @@ def main():
                 t.join(1) # Check thread status every 1 second
     finally:
         # --- PHASE 4: Deferred Cleanup & Git Commit ---
-        logger.info("\n🏁 Executing deferred state commit to Git...")
-        save_state(sniped_seats_memory)
+        logger.info("\n🏁 Executing final deferred state commit to Git...")
+        save_state(sniped_seats_memory) # Fallback final save
         logger.info("🏁 Script shutting down gracefully.")
         
 if __name__ == "__main__":
