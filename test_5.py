@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260816"]
+DATES = ["20260818"]
 VENUE_CODE = "PRHN"
 STATE_FILE = "sniped_state_85.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -42,7 +42,8 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "N": ["3", "4", "5"]
+    "N": ["3", "4", "5", "23", "24"],
+    "M": ["23", "24"]
 }
 
 PROXY_POOL = []
