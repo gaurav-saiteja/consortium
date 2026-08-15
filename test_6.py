@@ -43,6 +43,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
+    "B": ["3","4","5", "6", "7", "8"],
     "N": ["23", "24"]
 }
 
