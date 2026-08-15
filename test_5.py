@@ -3,6 +3,7 @@ from curl_cffi import requests as cffi_requests
 import time
 import json
 import os
+import queue
 import re
 import subprocess
 import random
@@ -106,6 +107,17 @@ def generate_headers(is_post=False):
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept-Encoding": "gzip, deflate"
     }
+
+def notification_worker(notif_queue, start_time):
+    logger.info("    -> [THREAD] 🔔 Notification sender background thread active.")
+    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        try:
+            # Block for up to 2 seconds waiting for an item in the queue
+            notif_data = notif_queue.get(timeout=2)
+            trigger_ntfy(notif_data["msg"], attach_url=notif_data.get("attach_url"))
+            notif_queue.task_done()
+        except queue.Empty:
+            continue
 
 def humanize_date(date_str):
     if not date_str or len(date_str) != 8:
@@ -386,7 +398,7 @@ def parse_layout(str_data):
     total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
-def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mutated_flag):
+def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mutated_flag, notif_queue):
     layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
     snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 3}
     
@@ -427,7 +439,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
                 if target_seat in available_in_row:
                     if lock_count < MAX_LOCK_ATTEMPTS and cooldown_passed:
                         meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                        success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
+                        success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state, notif_queue)
                         
                         if success:
                             with state_lock:
@@ -579,7 +591,7 @@ def initiate_payment(trans_id, trans_uid, network_state):
     logger.error("    -> 🔴 [SNIPER] FAILED to generate payment intent.")
     return None
 
-def execute_snipe(session, row, seat_num, meta, categories, network_state):
+def execute_snipe(session, row, seat_num, meta, categories, network_state, notif_queue):
     cat_info = categories.get(meta["block_code"])
     if not cat_info: return False
     
@@ -603,9 +615,10 @@ def execute_snipe(session, row, seat_num, meta, categories, network_state):
     # 3. Format Notification & Trigger Push
     qr_image_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
     hum_date = humanize_date(session["dateCode"])
-    msg = f"Row {row} Seat {seat_num} is locked and awaiting payment.\n\n{VENUE_CODE} {session['eventCode']} {hum_date} {session['time']} {session['attribute']}"
     
-    trigger_ntfy(msg, attach_url=qr_image_url)
+    msg = f"Row {row} Seat {seat_num} is locked and awaiting payment.\n\n{VENUE_CODE} {session['eventCode']} {hum_date} {session['time']} {session['attribute']}"
+    notif_queue.put({"msg": msg, "attach_url": qr_image_url})
+    #trigger_ntfy(msg, attach_url=qr_image_url)
     return True
 
 # =======================================================
@@ -627,6 +640,7 @@ def main():
     sniped_seats_memory = load_state()
     state_lock = threading.Lock()
     mutated_flag = [False] # Shared dirty flag passed to all threads
+    notif_queue = queue.Queue() # NEW: Shared queue for notifications
     logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
 
     # --- PHASE 1: Wait for Showtimes to list ---
@@ -664,11 +678,20 @@ def main():
     saver_t.start()
     threads.append(saver_t)
 
+    # 1.5 NEW: Spawn the Notification Sender thread
+    notif_t = threading.Thread(
+        target=notification_worker,
+        args=(notif_queue, start_time)
+    )
+    notif_t.daemon = True
+    notif_t.start()
+    threads.append(notif_t)
+
     # 2. Spawn the Sniper threads
     for session in target_sessions:
         t = threading.Thread(
             target=monitor_and_snipe_worker, 
-            args=(session, sniped_seats_memory, state_lock, start_time, mutated_flag)
+            args=(session, sniped_seats_memory, state_lock, start_time, mutated_flag, notif_queue)
         )
         t.daemon = True
         t.start()
@@ -680,10 +703,12 @@ def main():
             while t.is_alive():
                 t.join(1) # Check thread status every 1 second
     finally:
+        if not notif_queue.empty():
+            logger.info("\n⏳ Waiting for remaining notifications to be sent...")
+            notif_queue.join()
+            
         # --- PHASE 4: Deferred Cleanup & Git Commit ---
         logger.info("\n🏁 Executing final deferred state commit to Git...")
-        save_state(sniped_seats_memory) # Fallback final save
-        logger.info("🏁 Script shutting down gracefully.")
         
 if __name__ == "__main__":
     main()
