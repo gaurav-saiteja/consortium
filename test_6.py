@@ -496,6 +496,10 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
                     qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
                     msg = f"[WAVE {wave_num}] Row {seat_data['row']} Seat {seat_data['seat_num']} is locked.\n\n{VENUE_CODE} {session['eventCode']} {humanize_date(session['dateCode'])} {session['time']}"
                     notif_queue.put({"msg": msg, "attach_url": qr_url})
+
+                    with state_lock:
+                        sniped_memory[test_key] = sniped_memory.get(test_key, 0) + 1
+                        mutated_flag[0] = True
                     
                     logger.info(f"    -> 🎯 Warmup SUCCESS on {test_key}! Fired Global Trigger for Wave {wave_num}!")
                     break
@@ -522,6 +526,10 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
                         qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
                         msg = f"[WAVE {wave_num}] Row {seat_data['row']} Seat {seat_data['seat_num']} is locked.\n\n{VENUE_CODE} {session['eventCode']} {humanize_date(session['dateCode'])} {session['time']}"
                         notif_queue.put({"msg": msg, "attach_url": qr_url})
+
+                        with state_lock:
+                            sniped_memory[key] = sniped_memory.get(key, 0) + 1
+                            mutated_flag[0] = True
                         break
                 time.sleep(2) # Retry delay
                 
