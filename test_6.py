@@ -30,7 +30,7 @@ TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_TIME_START = "07:00 AM"
-TARGET_TIME_END = "08:59 AM"
+TARGET_TIME_END = "11:59 PM"
 
 # --- NEW: CONTINUOUS LOCKING CONFIG ---
 MAX_LOCK_ATTEMPTS = 5
@@ -465,7 +465,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
 
         # 1. COOLDOWN STATE
         logger.info(f"    -> 💤 Session {s_id} entering Wave {wave_num} Cooldown (14m 30s)...")
-        time.sleep(900)
+        time.sleep(910)
 
         # 2. WARMUP STATE
         logger.info(f"    -> 🔥 Session {s_id} entering Wave {wave_num} Warmup State...")
