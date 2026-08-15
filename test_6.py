@@ -398,75 +398,142 @@ def parse_layout(str_data):
     total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
-def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mutated_flag, notif_queue):
+def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mutated_flag, notif_queue, shared_wave_state):
     layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
     snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 3}
-    
     s_id = session["sessionId"]
-    logger.info(f"    -> [THREAD] 🚀 Started monitoring Session {s_id} ({session['time']})")
     
-    # NEW: Track when a seat was last locked by this specific thread to prevent cache phantoms
-    cooldown_memory = {}
+    logger.info(f"    -> [THREAD] 🚀 Started Session {s_id} ({session['time']}) - WAVE 1 (Initial Discovery)")
     
+    # my_roster stores the static backend data required to lock a seat without needing the layout API again
+    my_roster = {} 
+
+    # ==========================================
+    # WAVE 1: INITIAL DISCOVERY & LOCKING
+    # ==========================================
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
         str_data = fetch_seat_layout(s_id, layout_network_state)
-        if not str_data:
-            logger.info("no str_data")
-            time.sleep(2)
-            continue
-            
-        current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
-        logger.info(f"    -> [POLL] Session {s_id} | Total available seats: {total_available}")
+        if str_data: break
+        time.sleep(2)
         
-        for target_row, target_seat_list in DESIRED_SEATS.items():
-            if target_row not in current_seats:
-                logger.info(f"       [-] Row {target_row} not available yet.")
-                continue
-                
-            available_in_row = current_seats[target_row]
-            
-            for target_seat in target_seat_list:
-                seat_memory_key = f"{s_id}_{target_row}_{target_seat}"
-                
-                # Fetch current lock count from global state
-                with state_lock:
-                    lock_count = sniped_memory.get(seat_memory_key, 0)
-                
-                # Check cooldown
-                last_locked_time = cooldown_memory.get(seat_memory_key, 0)
-                cooldown_passed = (time.time() - last_locked_time) > COOLDOWN_SECONDS
+    current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
+    ticket_category = "0009" if "3D" in session.get("eventDimension", "").upper() else "0006"
 
-                if target_seat in available_in_row:
-                    if lock_count < MAX_LOCK_ATTEMPTS and cooldown_passed:
-                        meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                        success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state, notif_queue)
-                        
-                        if success:
-                            with state_lock:
-                                # Increment the lock count
-                                sniped_memory[seat_memory_key] = sniped_memory.get(seat_memory_key, 0) + 1
-                                # --- NEW: Tell the background thread to save ---
-                                mutated_flag[0] = True 
-                            
-                            # Update thread-local cooldown timer
-                            cooldown_memory[seat_memory_key] = time.time()
-                            logger.info(f"✅ Successfully sniped: {seat_memory_key} (Attempt {lock_count + 1}/{MAX_LOCK_ATTEMPTS})")
-                            time.sleep(2)
-                        else:
-                            logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
+    for target_row, target_seat_list in DESIRED_SEATS.items():
+        if target_row not in current_seats: continue
+            
+        for target_seat in target_seat_list:
+            if target_seat in current_seats[target_row]:
+                seat_key = f"{s_id}_{target_row}_{target_seat}"
+                meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                if not meta: continue
                     
-                    elif lock_count >= MAX_LOCK_ATTEMPTS:
-                        # Optional: You can silence this logger if it gets too spammy
-                        pass 
+                cat_info = categories_map.get(meta["block_code"])
+                if not cat_info: continue
+                c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
+                
+                # Wave 1: 5-Retry Blocking Loop
+                success = False
+                for attempt in range(5):
+                    t_id, t_uid = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], snipe_network_state)
+                    if t_id:
+                        upi_intent = initiate_payment(t_id, t_uid, snipe_network_state)
+                        if upi_intent:
+                            success = True
+                            qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
+                            msg = f"[WAVE 1] Row {target_row} Seat {target_seat} is locked.\n\n{VENUE_CODE} {session['eventCode']} {humanize_date(session['dateCode'])} {session['time']}"
+                            notif_queue.put({"msg": msg, "attach_url": qr_url})
+                            break
+                    time.sleep(1) # Delay between retries
+                
+                if success:
+                    # Save seat properties to local roster so we never need the layout API again
+                    my_roster[seat_key] = {
+                        "row": target_row, "seat_num": target_seat,
+                        "meta": meta, "c_code": c_code, "a_id": a_id, "ticket_category": ticket_category
+                    }
+                    with state_lock:
+                        sniped_memory[seat_key] = sniped_memory.get(seat_key, 0) + 1
+                        mutated_flag[0] = True
+
+    # ==========================================
+    # WAVES 2 TO 5: COOLDOWN -> WARMUP -> LOCK
+    # ==========================================
+    for wave_num in range(2, 6):
+        if not my_roster:
+            logger.info(f"    -> 🛑 Thread for {s_id} has 0 seats in roster. Terminating early.")
+            return
+
+        # 1. COOLDOWN STATE
+        logger.info(f"    -> 💤 Session {s_id} entering Wave {wave_num} Cooldown (14m 30s)...")
+        time.sleep(870)
+
+        # 2. WARMUP STATE
+        logger.info(f"    -> 🔥 Session {s_id} entering Wave {wave_num} Warmup State...")
+        roster_keys = list(my_roster.keys())
+        random.shuffle(roster_keys)
+        warmup_success_key = None
+        
+        while True:
+            # Check for Global Trigger from another thread
+            if shared_wave_state["current_wave"] >= wave_num:
+                logger.info(f"    -> 🚨 Global Trigger detected! Session {s_id} snapping out of Warmup!")
+                break
+
+            # Pick next random seat, cycle it to the back of the line
+            test_key = roster_keys.pop(0)
+            roster_keys.append(test_key)
+            seat_data = my_roster[test_key]
+            
+            t_id, t_uid = lock_seat(s_id, seat_data["meta"]["row_index"], seat_data["meta"]["backend_seat"], seat_data["c_code"], seat_data["a_id"], seat_data["ticket_category"], session["eventCode"], snipe_network_state)
+            if t_id:
+                upi_intent = initiate_payment(t_id, t_uid, snipe_network_state)
+                if upi_intent:
+                    # GLOBAL TRIGGER ACTIVATED
+                    shared_wave_state["current_wave"] = wave_num
+                    warmup_success_key = test_key
                     
-                    elif not cooldown_passed:
-                        # Optional: You can silence this logger if it gets too spammy
-                        pass
-                        
-                elif target_seat not in available_in_row:
-                    logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
-                        
-        time.sleep(20)
+                    qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
+                    msg = f"[WAVE {wave_num}] Row {seat_data['row']} Seat {seat_data['seat_num']} is locked.\n\n{VENUE_CODE} {session['eventCode']} {humanize_date(session['dateCode'])} {session['time']}"
+                    notif_queue.put({"msg": msg, "attach_url": qr_url})
+                    
+                    logger.info(f"    -> 🎯 Warmup SUCCESS on {test_key}! Fired Global Trigger for Wave {wave_num}!")
+                    break
+                    
+            time.sleep(2) # Warmup hammer cooldown
+            
+        # 3. MAIN BLOCKING PHASE
+        logger.info(f"    -> 🌊 Session {s_id} starting Wave {wave_num} Main Blocking Phase...")
+        keys_to_process = list(my_roster.keys())
+        if warmup_success_key in keys_to_process:
+            keys_to_process.remove(warmup_success_key) # Don't re-lock the seat we just got in warmup
+            
+        for key in keys_to_process:
+            seat_data = my_roster[key]
+            success = False
+            
+            # 5-Retry Window for normal wave
+            for attempt in range(5):
+                t_id, t_uid = lock_seat(s_id, seat_data["meta"]["row_index"], seat_data["meta"]["backend_seat"], seat_data["c_code"], seat_data["a_id"], seat_data["ticket_category"], session["eventCode"], snipe_network_state)
+                if t_id:
+                    upi_intent = initiate_payment(t_id, t_uid, snipe_network_state)
+                    if upi_intent:
+                        success = True
+                        qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
+                        msg = f"[WAVE {wave_num}] Row {seat_data['row']} Seat {seat_data['seat_num']} is locked.\n\n{VENUE_CODE} {session['eventCode']} {humanize_date(session['dateCode'])} {session['time']}"
+                        notif_queue.put({"msg": msg, "attach_url": qr_url})
+                        break
+                time.sleep(1) # Retry delay
+                
+            if not success:
+                logger.warning(f"    -> ❌ Session {s_id} Seat {key} failed 5 times in Wave {wave_num}. Dropping from state.")
+                del my_roster[key] # Remove from thread roster
+                with state_lock:
+                    if key in sniped_memory:
+                        del sniped_memory[key] # Remove from Git Memory
+                    mutated_flag[0] = True
+
+    logger.info(f"    -> 🏁 Session {s_id} finished all 5 Waves. Terminating thread.")
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
@@ -591,36 +658,6 @@ def initiate_payment(trans_id, trans_uid, network_state):
     logger.error("    -> 🔴 [SNIPER] FAILED to generate payment intent.")
     return None
 
-def execute_snipe(session, row, seat_num, meta, categories, network_state, notif_queue):
-    cat_info = categories.get(meta["block_code"])
-    if not cat_info: return False
-    
-    c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
-    
-    if "3D" in session.get("eventDimension", "").upper():
-        ticket_category = "0009"
-    else:
-        ticket_category = "0006"
-    
-    logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
-    
-    # 1. Lock 
-    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], network_state)
-    if not t_id: return False
-    
-    # 2. Pay
-    upi_intent = initiate_payment(t_id, t_uid, network_state)
-    if not upi_intent: return False
-    
-    # 3. Format Notification & Trigger Push
-    qr_image_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-    hum_date = humanize_date(session["dateCode"])
-    
-    msg = f"Row {row} Seat {seat_num} is locked and awaiting payment.\n\n{VENUE_CODE} {session['eventCode']} {hum_date} {session['time']} {session['attribute']}"
-    notif_queue.put({"msg": msg, "attach_url": qr_image_url})
-    #trigger_ntfy(msg, attach_url=qr_image_url)
-    return True
-
 # =======================================================
 # MAIN LOOP STATE MACHINE
 # =======================================================
@@ -641,6 +678,10 @@ def main():
     state_lock = threading.Lock()
     mutated_flag = [False] # Shared dirty flag passed to all threads
     notif_queue = queue.Queue() # NEW: Shared queue for notifications
+    
+    # NEW: Shared global wave trigger (starts at Wave 1)
+    shared_wave_state = {"current_wave": 1} 
+    
     logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
 
     # --- PHASE 1: Wait for Showtimes to list ---
@@ -691,7 +732,7 @@ def main():
     for session in target_sessions:
         t = threading.Thread(
             target=monitor_and_snipe_worker, 
-            args=(session, sniped_seats_memory, state_lock, start_time, mutated_flag, notif_queue)
+            args=(session, sniped_seats_memory, state_lock, start_time, mutated_flag, notif_queue, shared_wave_state)
         )
         t.daemon = True
         t.start()
