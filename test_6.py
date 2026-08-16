@@ -459,7 +459,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
     # ==========================================
     # WAVES 2 TO 5: COOLDOWN -> WARMUP -> LOCK
     # ==========================================
-    for wave_num in range(2, 6):
+    for wave_num in range(2, 4):
         if not my_roster:
             logger.info(f"    -> 🛑 Thread for {s_id} has 0 seats in roster. Terminating early.")
             return
