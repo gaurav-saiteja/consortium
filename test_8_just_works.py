@@ -399,8 +399,8 @@ def parse_layout(str_data):
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
 def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mutated_flag, notif_queue, shared_wave_state):
-    layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
-    snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 3}
+    layout_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
+    snipe_network_state = {"state": 0, "pool_proxy": None, "max_states": 3}
     s_id = session["sessionId"]
     
     logger.info(f"    -> [THREAD] 🚀 Started Session {s_id} ({session['time']}) - WAVE 1 (Initial Discovery)")
@@ -467,6 +467,10 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
         # 1. COOLDOWN STATE
         logger.info(f"    -> 💤 Session {s_id} entering Wave {wave_num} Cooldown (14m 30s)...")
         time.sleep(870)
+
+        snipe_network_state["state"] = 0
+        snipe_network_state["pool_proxy"] = None
+        logger.info(f"    -> 🔄 Session {s_id} network state reset to Raw IP (State 0).")
 
         # 2. WARMUP STATE
         logger.info(f"    -> 🔥 Session {s_id} entering Wave {wave_num} Warmup State...")
