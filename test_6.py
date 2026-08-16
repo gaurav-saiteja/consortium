@@ -434,7 +434,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
                 
                 # Wave 1: 5-Retry Blocking Loop
                 success = False
-                for attempt in range(5):
+                for attempt in range(8):
                     t_id, t_uid = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], snipe_network_state)
                     if t_id:
                         upi_intent = initiate_payment(t_id, t_uid, snipe_network_state)
@@ -517,7 +517,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
             success = False
             
             # 5-Retry Window for normal wave
-            for attempt in range(5):
+            for attempt in range(25):
                 t_id, t_uid = lock_seat(s_id, seat_data["meta"]["row_index"], seat_data["meta"]["backend_seat"], seat_data["c_code"], seat_data["a_id"], seat_data["ticket_category"], session["eventCode"], snipe_network_state)
                 if t_id:
                     upi_intent = initiate_payment(t_id, t_uid, snipe_network_state)
