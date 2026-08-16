@@ -21,9 +21,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260818"]
+DATES = ["20260819"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_85.json"
+STATE_FILE = "sniped_state_105.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
@@ -43,7 +43,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "B": ["3","4","5", "6", "7", "8"],
+    "A": ["3","4","5", "6", "7", "8"],
     "N": ["23", "24"]
 }
 
@@ -466,7 +466,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
 
         # 1. COOLDOWN STATE
         logger.info(f"    -> 💤 Session {s_id} entering Wave {wave_num} Cooldown (14m 30s)...")
-        time.sleep(910)
+        time.sleep(870)
 
         # 2. WARMUP STATE
         logger.info(f"    -> 🔥 Session {s_id} entering Wave {wave_num} Warmup State...")
