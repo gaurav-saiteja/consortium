@@ -204,14 +204,22 @@ def trigger_ntfy(message, attach_url=None):
         
     for i in range(1):
         try:
-            resp = requests.post(f"https://ntfy.sh/{TOPIC}", data=message.encode('utf-8'), headers=headers, timeout=10)
-            if resp.status_code == 200:
-                logger.info(f"✅ Ntfy ping sent! Status: {resp.status_code}")
+                resp = cffi_requests.post(
+                    f"https://ntfy.sh/{TOPIC}", 
+                    data=message.encode('utf-8'), 
+                    headers=headers,
+                    impersonate="chrome",
+                    timeout=15
+                )
+                if resp.status_code == 200:
+                    logger.info(f"✅ Ntfy ping sent! Status: {resp.status_code}")
         except Exception as e:
             logger.error(f"❌ Ntfy ping failed: {e}")
 
 def start_warp():
     logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
+    # Force WARP into proxy mode so it doesn't break the global network for Git
+    subprocess.run(["warp-cli", "--accept-tos", "set-mode", "proxy"], capture_output=True, check=False)
     subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
     time.sleep(5)
 
