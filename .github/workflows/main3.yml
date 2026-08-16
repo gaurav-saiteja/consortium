@@ -61,4 +61,4 @@ jobs:
             BMS_PHONE: ${{ secrets.BMS_PHONE }}
             NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
             PROXY_LIST: ${{ secrets.PROXY_LIST }}
-        run: python -u test_6.py
+        run: python -u test_8_just_works.py
