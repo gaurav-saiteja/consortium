@@ -1,4 +1,4 @@
-name: 4th
+name: 3rd
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           
       - name: Install Python Dependencies
         run: pip install requests curl-cffi
@@ -56,4 +56,9 @@ jobs:
           curl -x socks5://127.0.0.1:40000 https://1.1.1.1/cdn-cgi/trace | grep warp || echo "WARP Test Failed, but continuing..."
 
       - name: Run Polling Script
-        run: python -u unb_4.py
+        env:
+            BMS_EMAIL: ${{ secrets.BMS_EMAIL }}
+            BMS_PHONE: ${{ secrets.BMS_PHONE }}
+            NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+            PROXY_LIST: ${{ secrets.PROXY_LIST }}
+        run: python -u test_7.py
