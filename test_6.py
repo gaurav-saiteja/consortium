@@ -508,7 +508,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
                     logger.info(f"    -> 🎯 Warmup SUCCESS on {test_key}! Fired Global Trigger for Wave {wave_num}!")
                     break
                     
-            time.sleep(random.uniform(2.1, 5.1)) # Warmup hammer cooldown
+            time.sleep(4.2) # Warmup hammer cooldown
             
         # 3. MAIN BLOCKING PHASE
         logger.info(f"    -> 🌊 Session {s_id} starting Wave {wave_num} Main Blocking Phase...")
@@ -535,7 +535,7 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
                             sniped_memory[key] = sniped_memory.get(key, 0) + 1
                             mutated_flag[0] = True
                         break
-                time.sleep(random.uniform(2.1, 5.1)) # Retry delay
+                time.sleep(4.2) # Retry delay
                 
             if not success:
                 logger.warning(f"    -> ❌ Session {s_id} Seat {key} failed 5 times in Wave {wave_num}. Dropping from state.")
