@@ -436,7 +436,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
         "sessionId": str(session_id),
-        "ticketCategory": "0006",
+        "ticketCategory": ticket_category,
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
