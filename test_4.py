@@ -11,7 +11,7 @@ import sys
 import signal
 import logging
 from datetime import datetime
-
+import queue
 # --- LOGGING CONFIGURATION ---
 logging.basicConfig(
     level=logging.INFO,
@@ -20,17 +20,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260814"]
+DATES = ["20260819"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_75.json"
+STATE_FILE = "sniped_state_115.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
-TARGET_TIME_START = "06:00 AM"
-TARGET_TIME_END = "07:00 AM"
-
+TARGET_SHOW_INDEX = 1
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
@@ -135,6 +133,19 @@ def load_state():
             logger.warning("Failed to decode local state JSON. Returning empty set.")
     return set()
 
+state_commit_queue = queue.Queue()
+
+def git_committer_worker_loop():
+    while True:
+        try:
+            sniped_set = state_commit_queue.get()
+            if sniped_set is None: # Exit signal
+                break
+            save_state(sniped_set)
+            state_commit_queue.task_done()
+        except Exception as e:
+            logger.error(f"[GIT-THREAD] Error committing state: {e}")
+
 def save_state(sniped_set):
     logger.info("\n[GIT] State mutated. Saving sniped seat state to Git...")
     for attempt in range(3):
@@ -223,14 +234,6 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
 # =======================================================
 def find_target_session():
     network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
-    try:
-        # Convert strings like "12:00 PM" into datetime.time objects for mathematical comparison
-        target_time_start_obj = datetime.strptime(TARGET_TIME_START, "%I:%M %p").time()
-        target_time_end_obj = datetime.strptime(TARGET_TIME_END, "%I:%M %p").time()
-    except Exception as e:
-        logger.error(f"❌ Time parsing error in config (TARGET_TIME_START/END). Error: {e}")
-        return []
-
     valid_shows = []
     
     for date_code in DATES:
@@ -248,15 +251,12 @@ def find_target_session():
             
             for show_detail in show_details_list:
                 for event in show_detail.get("Event", []):
-                    # Check both parent and child level for the matching Movie Code
                     parent_code = event.get("EventCode", "")
                     for child in event.get("ChildEvents", []):
-                        # Extract the event code dynamically (prioritize child code, fallback to parent)
                         current_event_code = child.get("EventCode", parent_code)
                         current_event_dimension = child.get("EventDimension", "")
                         
                         for show in child.get("ShowTimes", []):
-                            # --- NEW: Constraint Check 0: Strict Date Verification ---
                             s_date_code = show.get("ShowDateCode", "")
                             if s_date_code != date_code:
                                 if not fallback_logged:
@@ -266,7 +266,7 @@ def find_target_session():
                             
                             s_attr = show.get("Attributes", "")
                             
-                            # 1. Constraint Check: Screen Attribute
+                            # 1. Constraint Check: Screen Attribute Only
                             if TARGET_ATTRIBUTE.lower() not in s_attr.lower():
                                 continue
                                 
@@ -276,25 +276,31 @@ def find_target_session():
                             except:
                                 continue
                             
-                            # 2. Constraint Check: Time Range
-                            if target_time_start_obj <= s_time_obj <= target_time_end_obj:
-                                valid_shows.append({
-                                    "sessionId": show.get("SessionId"),
-                                    "eventCode": current_event_code,
-                                    "eventDimension": current_event_dimension,
-                                    "dateCode": show.get("ShowDateCode"),
-                                    "time": s_time_str,
-                                    "attribute": s_attr,
-                                    "datetime_obj": s_time_obj,
-                                    "screen": show.get("ScreenName", "Unknown")
-                                })
+                            valid_shows.append({
+                                "sessionId": show.get("SessionId"),
+                                "eventCode": current_event_code,
+                                "eventDimension": current_event_dimension,
+                                "dateCode": show.get("ShowDateCode"),
+                                "time": s_time_str,
+                                "attribute": s_attr,
+                                "datetime_obj": s_time_obj,
+                                "screen": show.get("ScreenName", "Unknown")
+                            })
         except Exception as e:
             logger.error(f"    -> ❌ Error parsing venue JSON for {date_code}: {e}")
             pass
             
     if valid_shows:
+        # Sort chronologically ascending
         valid_shows.sort(key=lambda x: x["datetime_obj"])
-        return valid_shows[:6]  # <-- Returns up to 5 shows
+        
+        if 1 <= TARGET_SHOW_INDEX <= len(valid_shows):
+            selected_show = valid_shows[TARGET_SHOW_INDEX - 1]
+            logger.info(f"    -> [INDEX] Selected Show Index {TARGET_SHOW_INDEX} out of {len(valid_shows)} matches: {selected_show['time']}")
+            return [selected_show] # Returned as list to preserve compatibility with downstream loop
+        else:
+            logger.warning(f"    -> [INDEX ERROR] Requested Index {TARGET_SHOW_INDEX} is out of bounds! Only {len(valid_shows)} shows matched constraints.")
+            return []
         
     return []
 
@@ -413,6 +419,11 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
                     if success:
                         with state_lock:
                             sniped_memory.add(seat_memory_key)
+                            # Create a copy so thread manipulation doesn't affect the queue item
+                            memory_snapshot = set(sniped_memory)
+                            
+                        # Queue the commit to run in the background thread
+                        state_commit_queue.put(memory_snapshot)
                         logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
                         time.sleep(2)
                     else:
@@ -572,9 +583,10 @@ def execute_snipe(session, row, seat_num, meta, categories, network_state):
     # 3. Format Notification & Trigger Push
     qr_image_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
     hum_date = humanize_date(session["dateCode"])
-    msg = f"Row {row} Seat {seat_num} is locked and awaiting payment.\n\n{VENUE_CODE} {session['eventCode']} {hum_date} {session['time']} {session['attribute']}"
+    msg = f"{row}{seat_num} is locked. {hum_date} {session['time']} {session['attribute']} {VENUE_CODE} {session['eventCode']}"
     
-    trigger_ntfy(msg, attach_url=qr_image_url)
+    # Fire and forget thread for Ntfy so it doesn't block
+    threading.Thread(target=trigger_ntfy, args=(msg, qr_image_url), daemon=True).start()
     return True
 
 # =======================================================
@@ -596,6 +608,12 @@ def main():
     sniped_seats_memory = load_state()
     state_lock = threading.Lock()
     logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
+
+    # --- START GIT COMMITTER THREAD ---
+    git_thread = threading.Thread(target=git_committer_worker_loop, daemon=True)
+    git_thread.start()
+
+    # --- PHASE 1: Wait for Showtimes to list ---
 
     # --- PHASE 1: Wait for Showtimes to list ---
     target_sessions = []
