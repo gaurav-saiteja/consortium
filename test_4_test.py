@@ -120,11 +120,6 @@ def humanize_date(date_str):
 
 
 
-def start_warp():
-    logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
-    subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-    time.sleep(5)
-
 def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
     for attempt in range(1, max_retries + 1):
         current_proxies = None
@@ -303,50 +298,82 @@ def parse_layout(str_data):
     total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
-def monitor_and_snipe_worker(session, start_time):
-    layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
-    
-    # Sniping (Lock/Pay) can access the Proxy Pool (2)
-    snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
+def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
+    # Independent thread-local network states, starting at 0 (Raw IP)
+    layout_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
+    snipe_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
     
     s_id = session["sessionId"]
-    logger.info(f"    -> [THREAD] 🚀 Started monitoring Session {s_id} ({session['time']})")
+    logger.info(f"    -> [THREAD {thread_id}] 🚀 Started managing {len(assigned_seats)} seats.")
     
-    # Calculate the total number of target seats for a single session
-    total_desired_seats = len(PRIORITY_SEATS)
+    # Initialize state tracker for this thread's chunk of seats
+    seat_tracker = {}
+    for row, seat in assigned_seats:
+        seat_tracker[(row, seat)] = {
+            "status": "POLLING", # States: POLLING, COOLDOWN, DEAD
+            "failures": 0,
+            "cooldown_until": 0
+        }
     
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        current_time = time.time()
+        
+        # 1. Update states (Check if any cooldowns have finished)
+        active_seats = 0
+        for (row, seat), data in seat_tracker.items():
+            if data["status"] == "COOLDOWN" and current_time >= data["cooldown_until"]:
+                logger.info(f"    -> [THREAD {thread_id}] ⏱️ Cooldown finished for {row}_{seat}. Resuming polling.")
+                data["status"] = "POLLING"
+                data["failures"] = 0 # Reset failures for the re-snipe attempt
+                
+            if data["status"] != "DEAD":
+                active_seats += 1
+                
+        # 2. Check if Thread is finished
+        if active_seats == 0:
+            logger.info(f"    -> [THREAD {thread_id}] 🏁 All assigned seats are DEAD (Max retries reached). Thread terminating.")
+            break
+            
+        # 3. Filter seats that actively need polling right now
+        polling_seats = [(r, s) for (r, s), d in seat_tracker.items() if d["status"] == "POLLING"]
+        
+        if not polling_seats:
+            # All active seats are currently on cooldown. Sleep briefly to save CPU.
+            time.sleep(5)
+            continue
+            
+        # 4. Fetch Layout for the polling seats
         str_data = fetch_seat_layout(s_id, layout_network_state)
         if not str_data:
-            logger.info("no str_data")
             time.sleep(2)
             continue
             
         current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
-        logger.info(f"    -> [POLL] Session {s_id} | Total available seats: {total_available}")
         
-        # Iterate over the single flattened queue in exact strict order
-        for target_row, target_seat in PRIORITY_SEATS:
-            if target_row not in current_seats:
-                # We optionally log this, but only once per row per cycle to avoid log spam
-                # logger.info(f"       [-] Row {target_row} not available yet.")
-                continue
-                
-            available_in_row = current_seats[target_row]
-            
-            if target_seat in available_in_row:
+        # 5. Evaluate layout and snipe
+        for target_row, target_seat in polling_seats:
+            if target_row in current_seats and target_seat in current_seats[target_row]:
                 meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                
+                # Attempt lock
                 success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
                 
                 if success:
-                    logger.info(f"✅ Successfully locked: {s_id}_{target_row}_{target_seat}")
-                    time.sleep(2)
+                    logger.info(f"✅ [THREAD {thread_id}] Successfully locked: {s_id}_{target_row}_{target_seat}")
+                    seat_tracker[(target_row, target_seat)]["status"] = "COOLDOWN"
+                    # 13 minutes and 10 seconds = 790 seconds
+                    seat_tracker[(target_row, target_seat)]["cooldown_until"] = time.time() + 790 
+                    seat_tracker[(target_row, target_seat)]["failures"] = 0
                 else:
-                    logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
+                    failures = seat_tracker[(target_row, target_seat)]["failures"] + 1
+                    seat_tracker[(target_row, target_seat)]["failures"] = failures
+                    logger.info(f"       [!] [THREAD {thread_id}] {target_row}_{target_seat} lock failed (Attempt {failures}/7).")
                     
-            else:
-                logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
-                        
+                    if failures >= 7:
+                        logger.warning(f"       🚫 [THREAD {thread_id}] Max retries reached for {target_row}_{target_seat}. Abandoning seat.")
+                        seat_tracker[(target_row, target_seat)]["status"] = "DEAD"
+            
+        # Global polling throttle
         time.sleep(20)
 
 # =======================================================
@@ -465,26 +492,33 @@ def main():
         logger.info("🏁 Max runtime reached before shows were listed. Shutting down.")
         return
 
-    # --- PROXY WARMUP: Activate WARP exactly before threading ---
-    logger.info("    -> 🛡️ Pre-warming WARP Proxy before spawning threads...")
-    start_warp()
         
-    # --- PHASE 2 & 3: Parallel Threading ---
-    logger.info(f"    -> 🚀 Spawning {len(target_sessions)} parallel threads...")
+    # --- PHASE 2 & 3: Parallel Threading with Chunking ---
+    num_threads = 10
+    # Calculate chunk size (ceiling division)
+    chunk_size = (len(PRIORITY_SEATS) + num_threads - 1) // num_threads 
+    chunks = [PRIORITY_SEATS[i:i + chunk_size] for i in range(0, len(PRIORITY_SEATS), chunk_size)]
+    
+    logger.info(f"    -> 🚀 Spawning {len(chunks)} parallel threads, distributing {len(PRIORITY_SEATS)} seats...")
+    
     threads = []
-    for session in target_sessions:
+    # target_sessions[0] is used because we only found 1 matching showtime
+    session = target_sessions[0] 
+    
+    for i, chunk in enumerate(chunks):
+        if not chunk: continue # Skip if chunk is empty
         t = threading.Thread(
             target=monitor_and_snipe_worker, 
-            args=(session, start_time)
+            args=(session, chunk, i + 1, start_time) # i+1 is the thread_id
         )
         t.daemon = True
         t.start()
         threads.append(t)
 
-    # Block main thread, waiting for all threads to finish their assigned tasks
+    # Block main thread, waiting for all threads to finish
     for t in threads:
         while t.is_alive():
-            t.join(1) # Check thread status every 1 second
+            t.join(1) 
             
     logger.info("🏁 Script shutting down gracefully.")
         
