@@ -299,82 +299,91 @@ def parse_layout(str_data):
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
 def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
-    # Independent thread-local network states, starting at 0 (Raw IP)
-    layout_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
+    # Independent thread-local network states starting at 0 (Raw IP)
     snipe_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
+    layout_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
     
     s_id = session["sessionId"]
     logger.info(f"    -> [THREAD {thread_id}] 🚀 Started managing {len(assigned_seats)} seats.")
     
-    # Initialize state tracker for this thread's chunk of seats
+    # --- PHASE A: ONE-TIME LAYOUT FETCH ---
+    # We fetch layout EXACTLY ONCE just to get the backend mapping (cat_code, area_id, backend_seat).
+    seat_metadata_cache = {}
+    categories_map_cache = {}
+    
+    logger.info(f"    -> [THREAD {thread_id}] Fetching initial layout for metadata mapping...")
+    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        str_data = fetch_seat_layout(s_id, layout_network_state)
+        if str_data:
+            _, categories_map_cache, full_seat_metadata, _ = parse_layout(str_data)
+            
+            for row, seat in assigned_seats:
+                meta_key = f"{row}_{seat}"
+                if meta_key in full_seat_metadata:
+                    seat_metadata_cache[meta_key] = full_seat_metadata[meta_key]
+                else:
+                    logger.warning(f"       [!] [THREAD {thread_id}] {row}_{seat} physically doesn't exist in layout!")
+                    
+            break # 🛑 BREAK FOREVER. No more layout polling.
+        time.sleep(2)
+
+    # Initialize State Tracker
     seat_tracker = {}
     for row, seat in assigned_seats:
+        if f"{row}_{seat}" not in seat_metadata_cache:
+            continue
         seat_tracker[(row, seat)] = {
-            "status": "POLLING", # States: POLLING, COOLDOWN, DEAD
+            "status": "READY", # States: READY, COOLDOWN, DEAD
             "failures": 0,
             "cooldown_until": 0
         }
-    
+
+    # --- PHASE B: INFINITE BLIND SNIPE LOOP ---
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
         current_time = time.time()
-        
-        # 1. Update states (Check if any cooldowns have finished)
         active_seats = 0
+        
         for (row, seat), data in seat_tracker.items():
+            if data["status"] == "DEAD":
+                continue
+                
+            active_seats += 1
+            
+            # Check if Cooldown is finished
             if data["status"] == "COOLDOWN" and current_time >= data["cooldown_until"]:
-                logger.info(f"    -> [THREAD {thread_id}] ⏱️ Cooldown finished for {row}_{seat}. Resuming polling.")
-                data["status"] = "POLLING"
-                data["failures"] = 0 # Reset failures for the re-snipe attempt
+                logger.info(f"    -> [THREAD {thread_id}] ⏱️ Cooldown finished for {row}_{seat}. Attempting blind re-snipe.")
+                data["status"] = "READY"
+                data["failures"] = 0 # Reset failures for this new attempt
                 
-            if data["status"] != "DEAD":
-                active_seats += 1
+            # Attempt Lock (Blind Fire)
+            if data["status"] == "READY":
+                meta = seat_metadata_cache[f"{row}_{seat}"]
                 
-        # 2. Check if Thread is finished
-        if active_seats == 0:
-            logger.info(f"    -> [THREAD {thread_id}] 🏁 All assigned seats are DEAD (Max retries reached). Thread terminating.")
-            break
-            
-        # 3. Filter seats that actively need polling right now
-        polling_seats = [(r, s) for (r, s), d in seat_tracker.items() if d["status"] == "POLLING"]
-        
-        if not polling_seats:
-            # All active seats are currently on cooldown. Sleep briefly to save CPU.
-            time.sleep(5)
-            continue
-            
-        # 4. Fetch Layout for the polling seats
-        str_data = fetch_seat_layout(s_id, layout_network_state)
-        if not str_data:
-            time.sleep(2)
-            continue
-            
-        current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
-        
-        # 5. Evaluate layout and snipe
-        for target_row, target_seat in polling_seats:
-            if target_row in current_seats and target_seat in current_seats[target_row]:
-                meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                
-                # Attempt lock
-                success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
+                # execute_snipe calls lock_seat directly. NO layout API is hit.
+                success = execute_snipe(session, row, seat, meta, categories_map_cache, snipe_network_state)
                 
                 if success:
-                    logger.info(f"✅ [THREAD {thread_id}] Successfully locked: {s_id}_{target_row}_{target_seat}")
-                    seat_tracker[(target_row, target_seat)]["status"] = "COOLDOWN"
-                    # 13 minutes and 10 seconds = 790 seconds
-                    seat_tracker[(target_row, target_seat)]["cooldown_until"] = time.time() + 790 
-                    seat_tracker[(target_row, target_seat)]["failures"] = 0
+                    logger.info(f"✅ [THREAD {thread_id}] Successfully locked: {s_id}_{row}_{seat}")
+                    data["status"] = "COOLDOWN"
+                    data["cooldown_until"] = time.time() + 790 # 13 mins 10 secs
+                    data["failures"] = 0
                 else:
-                    failures = seat_tracker[(target_row, target_seat)]["failures"] + 1
-                    seat_tracker[(target_row, target_seat)]["failures"] = failures
-                    logger.info(f"       [!] [THREAD {thread_id}] {target_row}_{target_seat} lock failed (Attempt {failures}/7).")
+                    data["failures"] += 1
+                    logger.info(f"       [!] [THREAD {thread_id}] {row}_{seat} lock failed (Attempt {data['failures']}/7).")
                     
-                    if failures >= 7:
-                        logger.warning(f"       🚫 [THREAD {thread_id}] Max retries reached for {target_row}_{target_seat}. Abandoning seat.")
-                        seat_tracker[(target_row, target_seat)]["status"] = "DEAD"
+                    if data["failures"] >= 7:
+                        logger.warning(f"       🚫 [THREAD {thread_id}] Max retries (7) reached for {row}_{seat}. Marking DEAD.")
+                        data["status"] = "DEAD"
+
+        # Check if thread is completely done
+        if active_seats == 0:
+            logger.info(f"    -> [THREAD {thread_id}] 🏁 All assigned seats are DEAD. Thread terminating.")
+            break
             
-        # Global polling throttle
-        time.sleep(20)
+        # Global pacing: Sleep 1 second.
+        # This paces retries to 1 attempt per second per seat.
+        # Also handles idle waiting when all seats are on 13m 10s cooldown.
+        time.sleep(1)
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
