@@ -29,9 +29,6 @@ TICKET_CATEGORY_2D = "4D"
 TARGET_SCREEN_NAME = "AUDI 05 4DX"
 TARGET_SHOW_INDEX = 1
 
-# --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
-EMAIL = os.environ.get("BMS_EMAIL") 
-PHONE = os.environ.get("BMS_PHONE")
 DESIRED_SEATS = {
     "B": ["03", "04", "05"]
 }
@@ -347,6 +344,13 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
     
+    # Generate dynamic parameters
+    dynamic_email = "".join(random.choices("0123456789abcdef", k=9)) + "@gmail.com"
+    dynamic_phone = "9" + "".join(random.choices("0123456789", k=9))
+    dynamic_bms_id = f"1.4{random.randint(1000000, 9999999)}.{random.randint(1000000000000, 9999999999999)}"
+    dynamic_version = f"1{random.randint(10000, 99999)}"
+    dynamic_ua = random.choice(user_agents)
+
     payload = {
         "appCode": "MOBAND2",
         "venueCode": VENUE_CODE,
@@ -354,12 +358,12 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
         "ticketCategory": ticket_category,
         "numberOfTickets": "1",
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
-        "email": EMAIL,
+        "email": dynamic_email,
         "eventCode": event_code,
-        "version": "18234",
+        "version": dynamic_version,
         "platform": "ANDROID",
-        "phone": PHONE,
-        "bmsId": "1.42419972.1785913202920",
+        "phone": dynamic_phone,
+        "bmsId": dynamic_bms_id,
         "seatLayoutType": "Y",
         "offerData": {}
     }
@@ -369,13 +373,13 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
         "X-Latitude": "17.385044",
         "X-Subregion-Code": "HYD",
         "X-App-Code": "MOBAND2",
-        "X-Phone": PHONE,
-        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011)",
+        "X-Phone": dynamic_phone,
+        "User-Agent": dynamic_ua,
         "X-Longitude": "78.48667",
         "X-Platform": "AND",
         "X-Region-Code": "HYD",
         "X-Platform-Code": "ANDROID",
-        "X-Email": EMAIL,
+        "X-Email": dynamic_email,
         "Content-Type": "text/plain; charset=utf-8",
         "Accept-Encoding": "gzip, deflate, br"
     }
