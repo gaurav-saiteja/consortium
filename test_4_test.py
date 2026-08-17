@@ -38,7 +38,7 @@ for row in ["G", "F", "E", "D", "C", "B", "A"]:
         PRIORITY_SEATS.append((row, seat))
 
 # Sequence 2: F, G, E, D in exact order for seats 09, 04, 10, 03, 11, 02, 12, 01
-for row in ["F", "G", "E", "D", ""C", "B"]:
+for row in ["F", "G", "E", "D", "C", "B"]:
     for seat in ["09", "04", "10", "03", "11", "02", "12", "01"]:
         PRIORITY_SEATS.append((row, seat))
 for row in ["A"]:
