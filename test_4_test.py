@@ -26,7 +26,7 @@ MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "4D"
 TICKET_CATEGORY_2D = "4D"
 # --- NEW: SHOWTIME CONSTRAINTS ---
-TARGET_ATTRIBUTE = "AUDI 05 4DX"
+TARGET_SCREEN_NAME = "AUDI 05 4DX"
 TARGET_SHOW_INDEX = 1
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
@@ -196,8 +196,8 @@ def find_target_session():
                             
                             s_attr = show.get("ScreenName", "")
                             
-                            # 1. Constraint Check: Screen Attribute Only
-                            if TARGET_ATTRIBUTE.lower() not in s_attr.lower():
+                            # 1. Constraint Check: Exact ScreenName Match (Case-insensitive & space-stripped)
+                            if TARGET_SCREEN_NAME.strip().lower() != s_screen_name.strip().lower():
                                 continue
                                 
                             s_time_str = show.get("ShowTime", "")
@@ -212,9 +212,9 @@ def find_target_session():
                                 "eventDimension": current_event_dimension,
                                 "dateCode": show.get("ShowDateCode"),
                                 "time": s_time_str,
-                                "attribute": s_attr,
+                                "attribute": s_screen_name,
                                 "datetime_obj": s_time_obj,
-                                "screen": show.get("ScreenName", "Unknown")
+                                "screen": s_screen_name
                             })
         except Exception as e:
             logger.error(f"    -> ❌ Error parsing venue JSON for {date_code}: {e}")
