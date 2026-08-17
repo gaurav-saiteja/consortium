@@ -140,7 +140,7 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
             if resp.status_code in [429, 403]:
                 logger.warning(f"    -> 🚧 WAF Block (HTTP {resp.status_code}) on {method}. Thread jumping network state. (Attempt {attempt}/{max_retries})")
                 if attempt < max_retries:
-                    max_states = network_state.get("max_states", 3)
+                    max_states = network_state.get("max_states", 2)
                     
                     # Jumping Loop:
                     # If max_states=2: 0 -> 1 -> 0
@@ -194,7 +194,7 @@ def find_target_session():
                                     fallback_logged = True
                                 continue
                             
-                            s_attr = show.get("ScreenName", "")
+                            s_screen_name = show.get("ScreenName", "")
                             
                             # 1. Constraint Check: Exact ScreenName Match (Case-insensitive & space-stripped)
                             if TARGET_SCREEN_NAME.strip().lower() != s_screen_name.strip().lower():
@@ -298,7 +298,7 @@ def monitor_and_snipe_worker(session, start_time):
     layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
     
     # Sniping (Lock/Pay) can access the Proxy Pool (2)
-    snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 3}
+    snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
     
     s_id = session["sessionId"]
     logger.info(f"    -> [THREAD] 🚀 Started monitoring Session {s_id} ({session['time']})")
