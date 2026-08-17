@@ -365,11 +365,11 @@ def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
                 if success:
                     logger.info(f"✅ [THREAD {thread_id}] Successfully locked: {s_id}_{row}_{seat}")
                     data["status"] = "COOLDOWN"
-                    data["cooldown_until"] = time.time() + 776 # 13 mins 10 secs
+                    data["cooldown_until"] = time.time() + 780 # 13 mins 10 secs
                     data["failures"] = 0
                 else:
                     data["failures"] += 1
-                    logger.info(f"       [!] [THREAD {thread_id}] {row}_{seat} lock failed (Attempt {data['failures']}/7).")
+                    logger.info(f"       [!] [THREAD {thread_id}] {row}_{seat} lock failed (Attempt {data['failures']}/15).")
                     
                     if data["failures"] >= 7:
                         logger.warning(f"       🚫 [THREAD {thread_id}] Max retries (7) reached for {row}_{seat}. Marking DEAD.")
