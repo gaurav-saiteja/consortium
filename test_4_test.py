@@ -36,7 +36,7 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "N": ["13", "14", "15"]
+    "A": ["03", "04", "05"]
 }
 
 PROXY_POOL = []
