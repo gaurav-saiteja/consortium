@@ -466,8 +466,7 @@ def main():
         threads.append(t)
 
     # Block main thread, waiting for all threads to finish their assigned tasks
-    try:
-        for t in threads:
+    for t in threads:
         while t.is_alive():
             t.join(1) # Check thread status every 1 second
             
