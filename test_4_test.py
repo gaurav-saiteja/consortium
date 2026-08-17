@@ -11,7 +11,7 @@ import sys
 import signal
 import logging
 from datetime import datetime
-import queue
+
 # --- LOGGING CONFIGURATION ---
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 DATES = ["20260818"]
 VENUE_CODE = "PVFS"
-STATE_FILE = "sniped_state_125.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "4D"
 TICKET_CATEGORY_2D = "4D"
@@ -33,8 +32,6 @@ TARGET_SHOW_INDEX = 1
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
 PHONE = os.environ.get("BMS_PHONE")
-TOPIC = os.environ.get("NTFY_TOPIC")
-
 DESIRED_SEATS = {
     "A": ["03", "04", "05"]
 }
@@ -112,74 +109,7 @@ def humanize_date(date_str):
     month_name = dt.strftime("%B")
     return f"{day}{suffix} {month_name}"
 
-def quiet_git_pull():
-    logger.debug("[GIT] Executing Git pull...")
-    subprocess.run(["git", "fetch", "origin", "main"], capture_output=True, check=False)
-    subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, check=False)
 
-def quiet_git_push():
-    logger.debug("[GIT] Executing Git push...")
-    res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True, check=False)
-    return res.returncode == 0
-
-def load_state():
-    logger.info("[GIT] Loading initial state from repository...")
-    quiet_git_pull()
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r") as f: 
-                return set(json.load(f))
-        except json.JSONDecodeError: 
-            logger.warning("Failed to decode local state JSON. Returning empty set.")
-    return set()
-
-state_commit_queue = queue.Queue()
-
-def git_committer_worker_loop():
-    while True:
-        try:
-            sniped_set = state_commit_queue.get()
-            if sniped_set is None: # Exit signal
-                break
-            save_state(sniped_set)
-            state_commit_queue.task_done()
-        except Exception as e:
-            logger.error(f"[GIT-THREAD] Error committing state: {e}")
-
-def save_state(sniped_set):
-    logger.info("\n[GIT] State mutated. Saving sniped seat state to Git...")
-    for attempt in range(3):
-        quiet_git_pull()
-        with open(STATE_FILE, "w") as f:
-            json.dump(list(sniped_set), f, indent=2)
-            
-        subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
-        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-        
-        if STATE_FILE in status.stdout:
-            subprocess.run(["git", "commit", "-m", "Update sniped seats state"], capture_output=True, check=False)
-            if quiet_git_push(): 
-                logger.info("[STATE] ✅ State successfully saved and pushed to remote.")
-                return
-            logger.warning(f"Git push failed on attempt {attempt+1}/3. Retrying...")
-            time.sleep(2)
-        else:
-            return
-    logger.error("❌ Failed to push state updates after 3 attempts.")
-
-def trigger_ntfy(message, attach_url=None):
-    logger.info(f"🔔 ALERTING VIA NTFY:\n{message}")
-    headers = {"Priority": "urgent"}
-    if attach_url:
-        headers["Attach"] = attach_url
-        
-    for i in range(1):
-        try:
-            resp = requests.post(f"https://ntfy.sh/{TOPIC}", data=message.encode('utf-8'), headers=headers, timeout=10)
-            if resp.status_code == 200:
-                logger.info(f"✅ Ntfy ping sent! Status: {resp.status_code}")
-        except Exception as e:
-            logger.error(f"❌ Ntfy ping failed: {e}")
 
 def start_warp():
     logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
@@ -364,7 +294,7 @@ def parse_layout(str_data):
     total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
-def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
+def monitor_and_snipe_worker(session, start_time):
     layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
     
     # Sniping (Lock/Pay) can access the Proxy Pool (2)
@@ -377,19 +307,6 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
     total_desired_seats = sum(len(seats) for seats in DESIRED_SEATS.values())
     
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        # --- NEW: EARLY EXIT CHECK ---
-        sniped_count = 0
-        with state_lock:
-            for target_row, target_seat_list in DESIRED_SEATS.items():
-                for target_seat in target_seat_list:
-                    if f"{s_id}_{target_row}_{target_seat}" in sniped_memory:
-                        sniped_count += 1
-                        
-        if sniped_count >= total_desired_seats:
-            logger.info(f"    -> [THREAD] 🎯 All target seats sniped for Session {s_id}! Thread exiting.")
-            break
-        # -----------------------------
-
         str_data = fetch_seat_layout(s_id, layout_network_state)
         if not str_data:
             logger.info("no str_data")
@@ -407,31 +324,18 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
             available_in_row = current_seats[target_row]
             
             for target_seat in target_seat_list:
-                seat_memory_key = f"{s_id}_{target_row}_{target_seat}"
                 
-                with state_lock:
-                    already_sniped = seat_memory_key in sniped_memory
-                
-                if target_seat in available_in_row and not already_sniped:
+                if target_seat in available_in_row:
                     meta = seat_metadata.get(f"{target_row}_{target_seat}")
                     success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
                     
                     if success:
-                        with state_lock:
-                            sniped_memory.add(seat_memory_key)
-                            # Create a copy so thread manipulation doesn't affect the queue item
-                            memory_snapshot = set(sniped_memory)
-                            
-                        # Queue the commit to run in the background thread
-                        state_commit_queue.put(memory_snapshot)
-                        logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
+                        logger.info(f"✅ Successfully locked: {s_id}_{target_row}_{target_seat}")
                         time.sleep(2)
                     else:
-                        # If the seat is available but the execute_snipe function fails silently
                         logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
                         
-                elif target_seat not in available_in_row:
-                    # PROPERLY ALIGNED: This will now run if the outer IF is false
+                else:
                     logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
                         
         time.sleep(20)
@@ -493,71 +397,6 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
     logger.error("    -> 🔴 [SNIPER] FAILED to lock seat.")
     return None, None
 
-def initiate_payment(trans_id, trans_uid, network_state):
-    logger.info(f"    -> 💸 [SNIPER] Request 2: Initiating payment intent for {trans_id}...")
-    url = "https://services-in.bookmyshow.com/doTrans.aspx"
-    
-    rand_hex = "".join(random.choices("0123456789abcdef", k=7))
-    boundary = f"----geckoformboundary4549d0c459b45033a86405c7a{rand_hex}"
-
-    headers = {
-        "Host": "services-in.bookmyshow.com",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Content-Type": f"multipart/form-data; boundary={boundary}",
-        "Referer": "https://in.bookmyshow.com/",
-        "X-Region-Code": "HYD",
-        "X-Region-Slug": "hyderabad",
-        "X-Latitude": "17.385044",
-        "X-Longitude": "78.486671",
-        "X-Deemed-Email": EMAIL,
-        "X-Deemed-Mobile": PHONE,
-        "X-Phone": PHONE,
-        "X-Mobile": PHONE,
-        "X-Email": EMAIL,
-        "X-Transaction-Uid": trans_uid,
-        "X-App-Code": "WEB",
-        "X-Platform-Code": "WEB",
-        "X-Platform": "WEB",
-        "Origin": "https://in.bookmyshow.com",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-site"
-    }
-
-    form_fields = [
-        f"--{boundary}", 'Content-Disposition: form-data; name="strAppCode"', '', 'WEB',
-        f"--{boundary}", 'Content-Disposition: form-data; name="lngTransactionIdentifier"', '', trans_id,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strCommand"', '', 'SETPAYMENT',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strVenueCode"', '', VENUE_CODE,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam1"', '', "'|TYPE=UPI|UPITYPE=QRCODE|IMAGEURL=''|PROCESSTYPE=REQUEST|LSID=|MEMBERID=|CLIENTID=movies|",
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam2"', '', '|ETICKET=Y|MTICKET=Y|',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam3"', '', EMAIL,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam4"', '', PHONE,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strFormat"', '', 'json',
-        f"--{boundary}--", ''
-    ]
-    
-    payload_str = '\r\n'.join(form_fields)
-    resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=payload_str.encode('utf-8'))
-    logger.info(f"{resp.status_code}")
-    if resp and resp.status_code == 200:
-        try:
-            data = resp.json()
-            bms = data.get("BookMyShow", {})
-            if bms.get("blnSuccess") == "true":
-                str_data = bms.get("strData", [])
-                if len(str_data) > 0:
-                    upi_url = str_data[0].get("BMSUPIQRPAYURL")
-                    logger.info(f"    -> 🟢 [SNIPER] SUCCESS! Payment Intent Generated!")
-                    return upi_url
-        except Exception as e:
-            logger.error(f"    -> ❌ [SNIPER] Error parsing Request 2: {e}")
-            
-    logger.error("    -> 🔴 [SNIPER] FAILED to generate payment intent.")
-    return None
 
 def execute_snipe(session, row, seat_num, meta, categories, network_state):
     cat_info = categories.get(meta["block_code"])
@@ -565,29 +404,16 @@ def execute_snipe(session, row, seat_num, meta, categories, network_state):
     
     c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
     
-    if "4DX 3D" in session.get("eventDimension", "").upper():
-        ticket_category = "4D"
-    else:
-        ticket_category = "4D"
+    ticket_category = "4D"
     
     logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
     
-    # 1. Lock 
+    # 1. Lock (The status code is already logged inside lock_seat)
     t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], network_state)
-    if not t_id: return False
     
-    # 2. Pay
-    upi_intent = initiate_payment(t_id, t_uid, network_state)
-    if not upi_intent: return False
-    
-    # 3. Format Notification & Trigger Push
-    qr_image_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-    hum_date = humanize_date(session["dateCode"])
-    msg = f"{row}{seat_num} is locked. {hum_date} {session['time']} {session['attribute']} {VENUE_CODE} {session['eventCode']}"
-    
-    # Fire and forget thread for Ntfy so it doesn't block
-    threading.Thread(target=trigger_ntfy, args=(msg, qr_image_url), daemon=True).start()
-    return True
+    if t_id:
+        return True
+    return False
 
 # =======================================================
 # MAIN LOOP STATE MACHINE
@@ -604,16 +430,6 @@ def main():
     logger.info("🚀 STARTING TARGETED SEAT SNIPER (MULTI-THREADED)")
     logger.info("==================================================\n")
 
-    logger.info("[GIT] Loading initial state from GitHub repository...")
-    sniped_seats_memory = load_state()
-    state_lock = threading.Lock()
-    logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
-
-    # --- START GIT COMMITTER THREAD ---
-    git_thread = threading.Thread(target=git_committer_worker_loop, daemon=True)
-    git_thread.start()
-
-    # --- PHASE 1: Wait for Showtimes to list ---
 
     # --- PHASE 1: Wait for Showtimes to list ---
     target_sessions = []
@@ -643,7 +459,7 @@ def main():
     for session in target_sessions:
         t = threading.Thread(
             target=monitor_and_snipe_worker, 
-            args=(session, sniped_seats_memory, state_lock, start_time)
+            args=(session, start_time)
         )
         t.daemon = True
         t.start()
@@ -652,13 +468,10 @@ def main():
     # Block main thread, waiting for all threads to finish their assigned tasks
     try:
         for t in threads:
-            while t.is_alive():
-                t.join(1) # Check thread status every 1 second
-    finally:
-        # --- PHASE 4: Deferred Cleanup & Git Commit ---
-        logger.info("\n🏁 Executing deferred state commit to Git...")
-        save_state(sniped_seats_memory)
-        logger.info("🏁 Script shutting down gracefully.")
+        while t.is_alive():
+            t.join(1) # Check thread status every 1 second
+            
+    logger.info("🏁 Script shutting down gracefully.")
         
 if __name__ == "__main__":
     main()
