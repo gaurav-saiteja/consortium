@@ -33,7 +33,7 @@ TARGET_SHOW_INDEX = 1
 EMAIL = os.environ.get("BMS_EMAIL") 
 PHONE = os.environ.get("BMS_PHONE")
 DESIRED_SEATS = {
-    "A": ["03", "04", "05"]
+    "B": ["03", "04", "05"]
 }
 
 PROXY_POOL = []
@@ -278,7 +278,7 @@ def parse_layout(str_data):
             match = re.search(r"([A-Z])([14])(\d+)", seat)
             if match:
                 block_code = match.group(1)
-                backend_seat = match.group(2)
+                backend_seat = match.group(3)
                 seat_num = match.group(3)
                 
                 available_in_row.append(seat_num)
