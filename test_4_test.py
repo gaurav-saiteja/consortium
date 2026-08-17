@@ -29,22 +29,21 @@ TICKET_CATEGORY_2D = "4D"
 TARGET_SCREEN_NAME = "AUDI 05 4DX"
 TARGET_SHOW_INDEX = 2
 
-DESIRED_SEATS = {
-    "G": ["06", "07", "05", "08"],
-    "F": ["06", "07", "05", "08"],
-    "E": ["06", "07", "05", "08"],
-    "D": ["06", "07", "05", "08"],
-    "F": ["09", "04", "10", "03", "11", "02", "12", "01"],
-    "G": ["09", "04", "10", "03", "11", "02", "12", "01"],
-    "E": ["09", "04", "10", "03", "11", "02", "12", "01"],
-    "D": ["09", "04", "10", "03", "11", "02", "12", "01"],
- #   "C": ["06", "07", "05", "08"],
- #   "C": ["09", "04", "10", "03", "11", "02", "12", "01"],
-  #  "B": ["06", "07", "05", "08"],
- #   "B": ["09", "04", "10", "03", "11", "02", "12", "01"],
- #   "A": ["06", "07", "05", "08"],
- #   "A": ["09", "04", "10", "03"],
-}
+# --- NEW: STRICT SEAT PRIORITY QUEUE ---
+PRIORITY_SEATS = []
+
+# Sequence 1: G, F, E, D in exact order for seats 06, 07, 05, 08
+for row in ["G", "F", "E", "D", "C", "B", "A"]:
+    for seat in ["06", "07", "05", "08"]:
+        PRIORITY_SEATS.append((row, seat))
+
+# Sequence 2: F, G, E, D in exact order for seats 09, 04, 10, 03, 11, 02, 12, 01
+for row in ["F", "G", "E", "D", ""C", "B"]:
+    for seat in ["09", "04", "10", "03", "11", "02", "12", "01"]:
+        PRIORITY_SEATS.append((row, seat))
+for row in ["A"]:
+    for seat in ["09", "04", "10", "03"]:
+        PRIORITY_SEATS.append((row, seat))
 
 PROXY_POOL = []
 raw_proxies = os.environ.get("PROXY_LIST", "")
@@ -314,7 +313,7 @@ def monitor_and_snipe_worker(session, start_time):
     logger.info(f"    -> [THREAD] 🚀 Started monitoring Session {s_id} ({session['time']})")
     
     # Calculate the total number of target seats for a single session
-    total_desired_seats = sum(len(seats) for seats in DESIRED_SEATS.values())
+    total_desired_seats = len(PRIORITY_SEATS)
     
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
         str_data = fetch_seat_layout(s_id, layout_network_state)
@@ -326,27 +325,27 @@ def monitor_and_snipe_worker(session, start_time):
         current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
         logger.info(f"    -> [POLL] Session {s_id} | Total available seats: {total_available}")
         
-        for target_row, target_seat_list in DESIRED_SEATS.items():
+        # Iterate over the single flattened queue in exact strict order
+        for target_row, target_seat in PRIORITY_SEATS:
             if target_row not in current_seats:
-                logger.info(f"       [-] Row {target_row} not available yet.")
+                # We optionally log this, but only once per row per cycle to avoid log spam
+                # logger.info(f"       [-] Row {target_row} not available yet.")
                 continue
                 
             available_in_row = current_seats[target_row]
             
-            for target_seat in target_seat_list:
+            if target_seat in available_in_row:
+                meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
                 
-                if target_seat in available_in_row:
-                    meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                    success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
-                    
-                    if success:
-                        logger.info(f"✅ Successfully locked: {s_id}_{target_row}_{target_seat}")
-                        time.sleep(2)
-                    else:
-                        logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
-                        
+                if success:
+                    logger.info(f"✅ Successfully locked: {s_id}_{target_row}_{target_seat}")
+                    time.sleep(2)
                 else:
-                    logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
+                    logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
+                    
+            else:
+                logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
                         
         time.sleep(20)
 
