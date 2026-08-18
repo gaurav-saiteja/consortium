@@ -422,7 +422,7 @@ def persistent_worker():
 
 def layout_poller(session, start_time):
     # Dedicated poller with independent network state
-    poller_network = {"state": 0, "pool_proxy": None, "max_states": 3}
+    poller_network = {"state": 0, "pool_proxy": None, "max_states": 2}
     s_id = session["sessionId"]
     logger.info(f"    -> [POLLER] 🚀 Dedicated poller active for Session {s_id}")
     
