@@ -365,7 +365,7 @@ def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
                 if success:
                     logger.info(f"✅ [THREAD {thread_id}] Successfully locked: {s_id}_{row}_{seat}")
                     data["status"] = "COOLDOWN"
-                    data["cooldown_until"] = time.time() + 776 # 13 mins 10 secs
+                    data["cooldown_until"] = time.time() + 784 # 13 mins 10 secs
                     data["failures"] = 0
                 else:
                     data["failures"] += 1
@@ -383,7 +383,7 @@ def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
         # Global pacing: Sleep 1 second.
         # This paces retries to 1 attempt per second per seat.
         # Also handles idle waiting when all seats are on 13m 10s cooldown.
-        time.sleep(2)
+        time.sleep(1)
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
