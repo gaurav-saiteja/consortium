@@ -383,7 +383,7 @@ def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
         # Global pacing: Sleep 1 second.
         # This paces retries to 1 attempt per second per seat.
         # Also handles idle waiting when all seats are on 13m 10s cooldown.
-        time.sleep(1)
+        time.sleep(2)
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
