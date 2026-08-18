@@ -371,8 +371,8 @@ def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
                     data["failures"] += 1
                     logger.info(f"       [!] [THREAD {thread_id}] {row}_{seat} lock failed (Attempt {data['failures']}/15).")
                     
-                    if data["failures"] >= 7:
-                        logger.warning(f"       🚫 [THREAD {thread_id}] Max retries (7) reached for {row}_{seat}. Marking DEAD.")
+                    if data["failures"] >= 15:
+                        logger.warning(f"       🚫 [THREAD {thread_id}] Max retries (15) reached for {row}_{seat}. Marking DEAD.")
                         data["status"] = "DEAD"
 
         # Check if thread is completely done
