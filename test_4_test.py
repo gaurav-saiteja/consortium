@@ -159,7 +159,7 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
         except Exception as e:
             logger.error(f"🌐 Request error on {method} (State {network_state['state']}, Attempt {attempt}/{max_retries}): {e}")
             if attempt < max_retries: 
-                time.sleep(3)
+                time.sleep(2)
                 continue
     return None
 
@@ -365,7 +365,7 @@ def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
                 if success:
                     logger.info(f"✅ [THREAD {thread_id}] Successfully locked: {s_id}_{row}_{seat}")
                     data["status"] = "COOLDOWN"
-                    data["cooldown_until"] = time.time() + 801 # 13 mins 10 secs
+                    data["cooldown_until"] = time.time() + 796 # 13 mins 10 secs
                     data["failures"] = 0
                 else:
                     data["failures"] += 1
@@ -383,7 +383,7 @@ def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
         # Global pacing: Sleep 1 second.
         # This paces retries to 1 attempt per second per seat.
         # Also handles idle waiting when all seats are on 13m 10s cooldown.
-        time.sleep(1)
+        time.sleep(1.5)
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
