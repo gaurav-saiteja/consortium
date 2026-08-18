@@ -365,7 +365,7 @@ def monitor_and_snipe_worker(session, assigned_seats, thread_id, start_time):
                 if success:
                     logger.info(f"✅ [THREAD {thread_id}] Successfully locked: {s_id}_{row}_{seat}")
                     data["status"] = "COOLDOWN"
-                    data["cooldown_until"] = time.time() + 786 # 13 mins 10 secs
+                    data["cooldown_until"] = time.time() + 776 # 13 mins 10 secs
                     data["failures"] = 0
                 else:
                     data["failures"] += 1
