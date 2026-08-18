@@ -30,6 +30,13 @@ TICKET_CATEGORY_2D = "0005"
 TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_SHOW_INDEX = 1
 
+task_queue = queue.Queue()
+in_flight_seats = set()
+state_lock = threading.Lock()
+thread_mgmt_lock = threading.Lock()
+free_threads = 10
+seat_counts_memory = {}
+
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
 PHONE = os.environ.get("BMS_PHONE")
@@ -128,30 +135,29 @@ def load_state():
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r") as f: 
-                return set(json.load(f))
+                return dict(json.load(f)) # Parse as Dictionary
         except json.JSONDecodeError: 
-            logger.warning("Failed to decode local state JSON. Returning empty set.")
-    return set()
+            logger.warning("Failed to decode local state JSON. Returning empty dictionary.")
+    return {}
 
 state_commit_queue = queue.Queue()
 
 def git_committer_worker_loop():
     while True:
         try:
-            sniped_set = state_commit_queue.get()
-            if sniped_set is None: # Exit signal
-                break
-            save_state(sniped_set)
+            state_dict_snap = state_commit_queue.get()
+            if state_dict_snap is None: break
+            save_state(state_dict_snap)
             state_commit_queue.task_done()
         except Exception as e:
             logger.error(f"[GIT-THREAD] Error committing state: {e}")
 
-def save_state(sniped_set):
+def save_state(state_dict):
     logger.info("\n[GIT] State mutated. Saving sniped seat state to Git...")
     for attempt in range(3):
         quiet_git_pull()
         with open(STATE_FILE, "w") as f:
-            json.dump(list(sniped_set), f, indent=2)
+            json.dump(state_dict, f, indent=2)
             
         subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
@@ -162,7 +168,7 @@ def save_state(sniped_set):
                 logger.info("[STATE] ✅ State successfully saved and pushed to remote.")
                 return
             logger.warning(f"Git push failed on attempt {attempt+1}/3. Retrying...")
-            time.sleep(2)
+            time.sleep(2) # Wait 2 seconds before retrying the Git push
         else:
             return
     logger.error("❌ Failed to push state updates after 3 attempts.")
@@ -184,13 +190,11 @@ def trigger_ntfy(message, attach_url=None):
 def start_warp():
     logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
     subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-    time.sleep(5)
+    time.sleep(5) # Wait 5 seconds for WARP proxy connection to fully establish
 
 def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
     for attempt in range(1, max_retries + 1):
         current_proxies = None
-        
-        # State Machine: 0 (Raw IP), 1 (WARP), 2 (Pool Proxy)
         if network_state["state"] == 1:
             current_proxies = PROXIES
         elif network_state["state"] == 2:
@@ -202,30 +206,23 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
         try:
             if method.upper() == 'GET':
                 resp = cffi_requests.get(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
-                logger.info(f"{resp.status_code}")
             else:
                 resp = cffi_requests.post(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
-                logger.info(f"{resp.status_code}")
             
             if resp.status_code in [429, 403]:
                 logger.warning(f"    -> 🚧 WAF Block (HTTP {resp.status_code}) on {method}. Thread jumping network state. (Attempt {attempt}/{max_retries})")
                 if attempt < max_retries:
                     max_states = network_state.get("max_states", 3)
-                    
-                    # Jumping Loop:
-                    # If max_states=2: 0 -> 1 -> 0
-                    # If max_states=3: 0 -> 1 -> 2 -> 0
                     network_state["state"] = (network_state["state"] + 1) % max_states
-                    
                     if network_state["state"] == 2:
-                        network_state["pool_proxy"] = None # Force a new random proxy to be picked next loop
-                    time.sleep(1)
+                        network_state["pool_proxy"] = None
+                    time.sleep(1) # 1 second short delay before jumping to the next proxy network state
                     continue
             return resp
         except Exception as e:
             logger.error(f"🌐 Request error on {method} (State {network_state['state']}, Attempt {attempt}/{max_retries}): {e}")
             if attempt < max_retries: 
-                time.sleep(3)
+                time.sleep(3) # 3 second cooldown before retrying the failed network request
                 continue
     return None
 
@@ -364,77 +361,106 @@ def parse_layout(str_data):
     total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
-def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time):
-    layout_network_state = {"state": 1, "pool_proxy": None, "max_states": 2}
+def persistent_worker():
+    global free_threads
+    # Base network state is 0. Independent for every worker.
+    network_state = {"state": 0, "pool_proxy": None, "max_states": 3}
+    last_active = time.time()
     
-    # Sniping (Lock/Pay) can access the Proxy Pool (2)
-    snipe_network_state = {"state": 1, "pool_proxy": None, "max_states": 3}
-    
+    while True:
+        task = task_queue.get()
+        if task is None: break
+        session, row, seat_num, meta, categories = task
+        seat_key = f"{session['sessionId']}_{row}_{seat_num}"
+        
+        with thread_mgmt_lock: 
+            free_threads -= 1
+        
+        # Idle check: Reset network state to 0 if idle for > 10 seconds
+        if time.time() - last_active > 10:
+            network_state["state"] = 0
+            network_state["pool_proxy"] = None
+            
+        success = False
+        # Maximum of 7 retries for locking and intent generation
+        for attempt in range(1, 8):
+            logger.info(f"    -> [WORKER] Attempt {attempt}/7 locking {row}{seat_num}")
+            if execute_snipe(session, row, seat_num, meta, categories, network_state):
+                success = True
+                break
+            time.sleep(2) # 2 second cooldown before retrying the lock sequence for this seat
+            
+        with state_lock:
+            if success:
+                # Increment the dictionary count. If 2, remove it entirely.
+                current_count = seat_counts_memory.get(seat_key, 0) + 1
+                if current_count >= 2:
+                    if seat_key in seat_counts_memory:
+                        del seat_counts_memory[seat_key]
+                else:
+                    seat_counts_memory[seat_key] = current_count
+                
+                # Push a dict copy to the Git Daemon Queue
+                state_commit_queue.put(dict(seat_counts_memory))
+            
+            # Unmark from In-Flight Tracker
+            if seat_key in in_flight_seats:
+                in_flight_seats.remove(seat_key)
+        
+        last_active = time.time()
+        with thread_mgmt_lock: 
+            free_threads += 1
+        task_queue.task_done()
+
+def layout_poller(session, start_time):
+    # Dedicated poller with independent network state
+    poller_network = {"state": 0, "pool_proxy": None, "max_states": 3}
     s_id = session["sessionId"]
-    logger.info(f"    -> [THREAD] 🚀 Started monitoring Session {s_id} ({session['time']})")
-    
-    # Calculate the total number of target seats for a single session
-    total_desired_seats = sum(len(seats) for seats in DESIRED_SEATS.values())
+    logger.info(f"    -> [POLLER] 🚀 Dedicated poller active for Session {s_id}")
     
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        # --- NEW: EARLY EXIT CHECK ---
-        sniped_count = 0
         with state_lock:
-            for target_row, target_seat_list in DESIRED_SEATS.items():
-                for target_seat in target_seat_list:
-                    if f"{s_id}_{target_row}_{target_seat}" in sniped_memory:
-                        sniped_count += 1
-                        
-        if sniped_count >= total_desired_seats:
-            logger.info(f"    -> [THREAD] 🎯 All target seats sniped for Session {s_id}! Thread exiting.")
-            break
-        # -----------------------------
-
-        str_data = fetch_seat_layout(s_id, layout_network_state)
+            # Terminate if state dictionary is entirely empty (all seats sniped 2x)
+            if not seat_counts_memory:
+                logger.info("    -> [POLLER] All desired seats reached 2 snipes! Shutting down gracefully.")
+                os.kill(os.getpid(), signal.SIGTERM)
+                break
+                
+        str_data = fetch_seat_layout(s_id, poller_network)
         if not str_data:
-            logger.info("no str_data")
-            time.sleep(2)
+            time.sleep(2) # Short 2 second delay before retrying a failed layout fetch
             continue
             
-        current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
-        logger.info(f"    -> [POLL] Session {s_id} | Total available seats: {total_available}")
+        current_seats, categories_map, seat_metadata, total_avail = parse_layout(str_data)
+        logger.info(f"    -> [POLL] Session {s_id} | Total available seats: {total_avail}")
         
-        for target_row, target_seat_list in DESIRED_SEATS.items():
-            if target_row not in current_seats:
-                logger.info(f"       [-] Row {target_row} not available yet.")
-                continue
+        with state_lock:
+            for target_row, target_seat_list in DESIRED_SEATS.items():
+                if target_row not in current_seats: continue
+                avail_in_row = current_seats[target_row]
                 
-            available_in_row = current_seats[target_row]
-            
-            for target_seat in target_seat_list:
-                seat_memory_key = f"{s_id}_{target_row}_{target_seat}"
-                
-                with state_lock:
-                    already_sniped = seat_memory_key in sniped_memory
-                
-                if target_seat in available_in_row and not already_sniped:
-                    meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                    success = execute_snipe(session, target_row, target_seat, meta, categories_map, snipe_network_state)
+                for target_seat in target_seat_list:
+                    seat_key = f"{s_id}_{target_row}_{target_seat}"
                     
-                    if success:
-                        with state_lock:
-                            sniped_memory.add(seat_memory_key)
-                            # Create a copy so thread manipulation doesn't affect the queue item
-                            memory_snapshot = set(sniped_memory)
+                    # Only assign if it's in memory (count < 2) AND not currently being processed
+                    if seat_key in seat_counts_memory and seat_key not in in_flight_seats:
+                        if target_seat in avail_in_row:
+                            in_flight_seats.add(seat_key)
+                            meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                            task = (session, target_row, target_seat, meta, categories_map)
                             
-                        # Queue the commit to run in the background thread
-                        state_commit_queue.put(memory_snapshot)
-                        logger.info(f"✅ Successfully sniped and memorized: {seat_memory_key}")
-                        time.sleep(2)
-                    else:
-                        # If the seat is available but the execute_snipe function fails silently
-                        logger.info(f"       [!] Row {target_row} Seat {target_seat} is available but snipe failed to lock.")
-                        
-                elif target_seat not in available_in_row:
-                    # PROPERLY ALIGNED: This will now run if the outer IF is false
-                    logger.info(f"       [-] Row {target_row} Seat {target_seat} is currently unavailable/booked.")
-                        
-        time.sleep(20)
+                            # Dynamic Worker Dispatcher Logic
+                            with thread_mgmt_lock:
+                                global free_threads
+                                if free_threads <= 0:
+                                    t = threading.Thread(target=persistent_worker, daemon=True)
+                                    t.start()
+                                    free_threads += 1
+                                    logger.info("    -> [DISPATCHER] Threads busy! Spawned new Worker Thread.")
+                                    
+                            task_queue.put(task)
+                            
+        time.sleep(20) # 20 second hard cooldown between layout polls
 
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
@@ -605,15 +631,13 @@ def main():
     logger.info("==================================================\n")
 
     logger.info("[GIT] Loading initial state from GitHub repository...")
-    sniped_seats_memory = load_state()
-    state_lock = threading.Lock()
-    logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
+    global seat_counts_memory
+    seat_counts_memory = load_state()
+    logger.info(f"[STATE] Loaded tracking data for {len(seat_counts_memory)} seats.\n")
 
     # --- START GIT COMMITTER THREAD ---
     git_thread = threading.Thread(target=git_committer_worker_loop, daemon=True)
     git_thread.start()
-
-    # --- PHASE 1: Wait for Showtimes to list ---
 
     # --- PHASE 1: Wait for Showtimes to list ---
     target_sessions = []
@@ -623,8 +647,7 @@ def main():
         target_sessions = find_target_session()
         
         if not target_sessions:
-            logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 23 seconds...")
-            time.sleep(5)
+            time.sleep(5) # 5 second polling interval to check if target showtimes are listed
         else:
             logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
             break
@@ -633,31 +656,59 @@ def main():
         logger.info("🏁 Max runtime reached before shows were listed. Shutting down.")
         return
 
-    # --- PROXY WARMUP: Activate WARP exactly before threading ---
+    # --- INITIALIZE DICTIONARY STATE ---
+    # Append any un-tracked desired seats into the dictionary with a value of 0.
+    state_changed = False
+    for session in target_sessions:
+        s_id = session["sessionId"]
+        for target_row, target_seat_list in DESIRED_SEATS.items():
+            for target_seat in target_seat_list:
+                key = f"{s_id}_{target_row}_{target_seat}"
+                if key not in seat_counts_memory:
+                    seat_counts_memory[key] = 0
+                    state_changed = True
+                    
+    if state_changed:
+        logger.info("[STATE] New target seats added. Committing baseline state to Git...")
+        save_state(seat_counts_memory)
+        
+    if not seat_counts_memory:
+        logger.info("🏁 State dict is empty (all target seats successfully sniped twice). Exiting.")
+        return
+
+    # --- PROXY WARMUP ---
     logger.info("    -> 🛡️ Pre-warming WARP Proxy before spawning threads...")
     start_warp()
         
-    # --- PHASE 2 & 3: Parallel Threading ---
-    logger.info(f"    -> 🚀 Spawning {len(target_sessions)} parallel threads...")
-    threads = []
-    for session in target_sessions:
-        t = threading.Thread(
-            target=monitor_and_snipe_worker, 
-            args=(session, sniped_seats_memory, state_lock, start_time)
-        )
-        t.daemon = True
-        t.start()
-        threads.append(t)
+    # --- PHASE 2 & 3: Parallel Dispatcher-Worker Engine ---
+    logger.info("    -> 🚀 Spawning 10 Idle Workers and 1 Dedicated Layout Poller...")
+    
+    # Spawn the 10 Idle Workers
+    global free_threads
+    free_threads = 10
+    worker_threads = []
+    for _ in range(10):
+        wt = threading.Thread(target=persistent_worker, daemon=True)
+        wt.start()
+        worker_threads.append(wt)
 
-    # Block main thread, waiting for all threads to finish their assigned tasks
+    # Spawn Poller (For simplicity targeting the first session, matching older logic)
+    main_session = target_sessions[0]
+    poller_thread = threading.Thread(
+        target=layout_poller, 
+        args=(main_session, start_time)
+    )
+    poller_thread.daemon = True
+    poller_thread.start()
+
+    # Block main thread, waiting until the poller finishes (either via Timeout or SIGTERM)
     try:
-        for t in threads:
-            while t.is_alive():
-                t.join(1) # Check thread status every 1 second
+        while poller_thread.is_alive():
+            poller_thread.join(1) # Block the main thread, check thread status every 1 second
     finally:
         # --- PHASE 4: Deferred Cleanup & Git Commit ---
         logger.info("\n🏁 Executing deferred state commit to Git...")
-        save_state(sniped_seats_memory)
+        save_state(seat_counts_memory)
         logger.info("🏁 Script shutting down gracefully.")
         
 if __name__ == "__main__":
