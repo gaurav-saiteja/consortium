@@ -28,7 +28,7 @@ TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
-TARGET_SHOW_INDEX = 1
+TARGET_SHOW_INDEX = 7
 
 task_queue = queue.Queue()
 in_flight_seats = set()
@@ -655,7 +655,7 @@ def main():
         target_sessions = find_target_session()
         
         if not target_sessions:
-            time.sleep(5) # 5 second polling interval to check if target showtimes are listed
+            time.sleep(8) # 5 second polling interval to check if target showtimes are listed
         else:
             logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
             break
