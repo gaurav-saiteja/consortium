@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260819"]
+DATES = ["20260820"]
 VENUE_CODE = "PRHN"
 STATE_FILE = "sniped_state_115.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -44,7 +44,7 @@ TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
     "N": ["47", "46", "45"],
-    "M": ["47", "46", "45"],
+    "M": ["47", "46", "45", "23", "24],
     "L": ["47", "46", "45"],
     "K": ["47", "46", "45"],
     "J": ["47", "46", "45"],
@@ -396,7 +396,7 @@ def persistent_worker():
             if execute_snipe(session, row, seat_num, meta, categories, network_state):
                 success = True
                 break
-            time.sleep(2) # 2 second cooldown before retrying the lock sequence for this seat
+            time.sleep(1.5) # 2 second cooldown before retrying the lock sequence for this seat
             
         with state_lock:
             if success:
