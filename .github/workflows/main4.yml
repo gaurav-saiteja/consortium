@@ -64,4 +64,4 @@ jobs:
           BMS_PHONE: '${{ secrets.BMS_PHONE }}'
           NTFY_TOPIC: '${{ secrets.NTFY_TOPIC }}'
           PROXY_LIST: '${{ secrets.PROXY_LIST }}'
-        run: python -u test_4_new.py
+        run: python -u troll_gpr.py
