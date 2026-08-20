@@ -55,10 +55,20 @@ jobs:
           # Test the proxy to ensure it's routing through Cloudflare
           curl -x socks5://127.0.0.1:40000 https://1.1.1.1/cdn-cgi/trace | grep warp || echo "WARP Test Failed, but continuing..."
 
-      - name: Run Polling Script
+      - name: Fetch and Run Polling Script
         env:
-            BMS_EMAIL: ${{ secrets.BMS_EMAIL }}
-            BMS_PHONE: ${{ secrets.BMS_PHONE }}
-            NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-            PROXY_LIST: ${{ secrets.PROXY_LIST }}
-        run: python -u troll_gpr.py
+          BMS_EMAIL: '${{ secrets.BMS_EMAIL }}'
+          BMS_PHONE: '${{ secrets.BMS_PHONE }}'
+          NTFY_TOPIC: '${{ secrets.NTFY_TOPIC }}'
+          PROXY_LIST: '${{ secrets.PROXY_LIST }}'
+          # Add the new secrets to the environment
+          WORKER_URL: '${{ secrets.WORKER_URL }}'
+          WORKER_PASSPHRASE: '${{ secrets.WORKER_PASSPHRASE }}'
+        run: |
+          curl -s -f -H "X-Worker-Passphrase: $WORKER_PASSPHRASE" "$WORKER_URL/test_4.py" -o test_4.py
+          
+          python -u test_4.py
+          
+      - name: Secure Cleanup
+        if: always() # Ensures the file is deleted even if the python script above crashes
+        run: rm -f test_4.py
