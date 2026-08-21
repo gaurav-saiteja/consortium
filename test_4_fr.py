@@ -732,6 +732,10 @@ def gha_sigterm_handler(signum, frame):
 def main():
     start_time = time.time()
     signal.signal(signal.SIGTERM, gha_sigterm_handler)
+
+    # --- START GRABROOM PRODUCER THREAD ---
+    grabroom_thread = threading.Thread(target=grabroom_producer_loop, daemon=True)
+    grabroom_thread.start()
     
     logger.info("==================================================")
     logger.info("🚀 STARTING TARGETED SEAT SNIPER (MULTI-THREADED)")
@@ -745,9 +749,6 @@ def main():
     # --- START GIT COMMITTER THREAD ---
     git_thread = threading.Thread(target=git_committer_worker_loop, daemon=True)
     git_thread.start()
-    # --- START GRABROOM PRODUCER THREAD ---
-    grabroom_thread = threading.Thread(target=grabroom_producer_loop, daemon=True)
-    grabroom_thread.start()
 
     # --- PHASE 1: Wait for Showtimes to list ---
     target_sessions = []
