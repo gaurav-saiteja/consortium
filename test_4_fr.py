@@ -31,6 +31,8 @@ TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_SHOW_INDEX = 1
 
 task_queue = queue.Queue()
+grabroom_queue = queue.Queue()
+GRABROOM_WEBHOOK_URL = os.environ.get("GRABROOM_WEBHOOK_URL", "https://your-cloudflare-worker.workers.dev/api/ticket")
 in_flight_seats = set()
 state_lock = threading.Lock()
 thread_mgmt_lock = threading.Lock()
@@ -273,9 +275,12 @@ def find_target_session():
             for show_detail in show_details_list:
                 for event in show_detail.get("Event", []):
                     parent_code = event.get("EventCode", "")
+                    event_title = event.get("EventTitle", "Unknown Title") # <-- NEW
+                    
                     for child in event.get("ChildEvents", []):
                         current_event_code = child.get("EventCode", parent_code)
                         current_event_dimension = child.get("EventDimension", "")
+                        event_language = child.get("EventLanguage", "Unknown Language") # <-- NEW
                         
                         for show in child.get("ShowTimes", []):
                             s_date_code = show.get("ShowDateCode", "")
@@ -300,6 +305,8 @@ def find_target_session():
                             valid_shows.append({
                                 "sessionId": show.get("SessionId"),
                                 "eventCode": current_event_code,
+                                "eventTitle": event_title,               # <-- NEW
+                                "eventLanguage": event_language,         # <-- NEW
                                 "eventDimension": current_event_dimension,
                                 "dateCode": show.get("ShowDateCode"),
                                 "time": s_time_str,
@@ -542,14 +549,15 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
             r_json = resp.json()
             t_id = r_json.get("transactionId")
             t_uid = r_json.get("transactionUID")
+            b_id = r_json.get("bookingId") # <-- NEW
             if t_id and t_uid:
                 logger.info(f"    -> 🟢 [SNIPER] SUCCESS! Seat locked! TransID: {t_id}")
-                return t_id, t_uid
+                return t_id, t_uid, b_id   # <-- MODIFIED
         except Exception as e:
             logger.error(f"    -> ❌ [SNIPER] Error parsing Request 1: {e}")
     
     logger.error("    -> 🔴 [SNIPER] FAILED to lock seat.")
-    return None, None
+    return None, None, None # <-- MODIFIED
 
 def initiate_payment(trans_id, trans_uid, network_state):
     logger.info(f"    -> 💸 [SNIPER] Request 2: Initiating payment intent for {trans_id}...")
@@ -630,8 +638,8 @@ def execute_snipe(session, row, seat_num, meta, categories, network_state):
     
     logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
     
-    # 1. Lock 
-    t_id, t_uid = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], network_state)
+    # 1. Lock (Note the added b_id unpack)
+    t_id, t_uid, b_id = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], network_state)
     if not t_id: return False
     
     # 2. Pay
@@ -643,9 +651,55 @@ def execute_snipe(session, row, seat_num, meta, categories, network_state):
     hum_date = humanize_date(session["dateCode"])
     msg = f"{row}{seat_num} is locked. {hum_date} {session['time']} {session['attribute']} {VENUE_CODE} {session['eventCode']}"
     
-    # Fire and forget thread for Ntfy so it doesn't block
     threading.Thread(target=trigger_ntfy, args=(msg, qr_image_url), daemon=True).start()
+    # --- NEW: GRABROOM PRODUCER LOGIC ---
+    ticket_payload = {
+        "seat": f"{row}{seat_num}",
+        "bookingId": b_id,
+        "transactionId": t_id,
+        "eventTitle": session.get("eventTitle"),
+        "eventLanguage": session.get("eventLanguage"),
+        "eventDimension": session.get("eventDimension"),
+        "showDateCode": session.get("dateCode"),
+        "showTime": session.get("time"),
+        "screenName": session.get("screen"),
+        "attributes": session.get("attribute"),
+        "qrImageUrl": qr_image_url,
+        "snipeTimestamp": int(time.time() * 1000) # Unix timestamp in milliseconds for exact 5 min timer calculation
+    }
+    grabroom_queue.put(ticket_payload)
+    # ------------------------------------
     return True
+
+def grabroom_producer_loop():
+    logger.info("[GRABROOM] 📡 Delivery thread started.")
+    while True:
+        try:
+            payload = grabroom_queue.get()
+            if payload is None: break
+            
+            # Guaranteed delivery retry loop
+            while True:
+                try:
+                    # Using standard requests here as we don't need WAF bypass for our own Worker
+                    resp = requests.post(
+                        GRABROOM_WEBHOOK_URL, 
+                        json=payload, 
+                        timeout=10
+                    )
+                    if resp.status_code in [200, 201]:
+                        logger.info(f"[GRABROOM] 🟢 Successfully delivered ticket {payload['seat']} to Grabroom!")
+                        break # Break retry loop, move to next queue item
+                    else:
+                        logger.warning(f"[GRABROOM] ⚠️ Server returned {resp.status_code}. Retrying in 2s...")
+                except Exception as e:
+                    logger.error(f"[GRABROOM] ❌ Network error sending to Grabroom: {e}. Retrying in 2s...")
+                
+                time.sleep(2) # Cooldown before retry
+                
+            grabroom_queue.task_done()
+        except Exception as e:
+            logger.error(f"[GRABROOM] Thread error: {e}")
 
 # =======================================================
 # MAIN LOOP STATE MACHINE
@@ -670,6 +724,9 @@ def main():
     # --- START GIT COMMITTER THREAD ---
     git_thread = threading.Thread(target=git_committer_worker_loop, daemon=True)
     git_thread.start()
+    # --- START GRABROOM PRODUCER THREAD ---
+    grabroom_thread = threading.Thread(target=grabroom_producer_loop, daemon=True)
+    grabroom_thread.start()
 
     # --- PHASE 1: Wait for Showtimes to list ---
     target_sessions = []
@@ -739,7 +796,18 @@ def main():
             poller_thread.join(1) # Block the main thread, check thread status every 1 second
     finally:
         # --- PHASE 4: Deferred Cleanup & Git Commit ---
-        logger.info("\n🏁 Executing deferred state commit to Git...")
+        logger.info("\n🏁 Flushing queues. Waiting for Grabroom delivery to complete...")
+        
+        # Wait up to 10 seconds for any pending Grabroom tickets to be delivered
+        # before the script gets killed completely.
+        def _flush_queue():
+            grabroom_queue.join()
+        
+        flush_thread = threading.Thread(target=_flush_queue)
+        flush_thread.start()
+        flush_thread.join(timeout=10.0) 
+
+        logger.info("🏁 Executing deferred state commit to Git...")
         save_state(seat_counts_memory)
         logger.info("🏁 Script shutting down gracefully.")
         
