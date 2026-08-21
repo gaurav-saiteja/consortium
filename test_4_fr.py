@@ -39,6 +39,9 @@ thread_mgmt_lock = threading.Lock()
 free_threads = 10
 seat_counts_memory = {}
 
+SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkcXhhZnlxcWtoeHVpcHpjamNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyOTYzNzIsImV4cCI6MjEwMjg3MjM3Mn0.dAerrc1sTh8CSnY6vZ4NtuvPXWNwjsHCl9gWZ436MLk"
+
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
 PHONE = os.environ.get("BMS_PHONE")
@@ -655,24 +658,35 @@ def execute_snipe(session, row, seat_num, meta, categories, network_state):
     # --- NEW: GRABROOM PRODUCER LOGIC ---
     ticket_payload = {
         "seat": f"{row}{seat_num}",
-        "bookingId": b_id,
-        "transactionId": t_id,
-        "eventTitle": session.get("eventTitle"),
-        "eventLanguage": session.get("eventLanguage"),
-        "eventDimension": session.get("eventDimension"),
-        "showDateCode": session.get("dateCode"),
-        "showTime": session.get("time"),
-        "screenName": session.get("screen"),
+        "booking_id": b_id,                   # Changed key
+        "transaction_id": t_id,               # Changed key
+        "event_title": session.get("eventTitle"),
+        "event_language": session.get("eventLanguage"),
+        "event_dimension": session.get("eventDimension"),
+        "show_date_code": session.get("dateCode"),
+        "show_time": session.get("time"),
+        "screen_name": session.get("screen"),
         "attributes": session.get("attribute"),
-        "qrImageUrl": qr_image_url,
-        "snipeTimestamp": int(time.time() * 1000) # Unix timestamp in milliseconds for exact 5 min timer calculation
+        "qr_image_url": qr_image_url,         # Changed key
+        "snipe_timestamp": int(time.time() * 1000)
     }
     grabroom_queue.put(ticket_payload)
     # ------------------------------------
     return True
 
 def grabroom_producer_loop():
-    logger.info("[GRABROOM] 📡 Delivery thread started.")
+    logger.info("[GRABROOM] 📡 Supabase Delivery thread started.")
+    
+    # Supabase REST API Endpoint for the 'tickets' table
+    endpoint = f"{SUPABASE_URL}/rest/v1/tickets"
+    
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+
     while True:
         try:
             payload = grabroom_queue.get()
@@ -681,19 +695,26 @@ def grabroom_producer_loop():
             # Guaranteed delivery retry loop
             while True:
                 try:
-                    # Using standard requests here as we don't need WAF bypass for our own Worker
                     resp = requests.post(
-                        GRABROOM_WEBHOOK_URL, 
+                        endpoint, 
                         json=payload, 
+                        headers=headers,
                         timeout=10
                     )
+                    
                     if resp.status_code in [200, 201]:
-                        logger.info(f"[GRABROOM] 🟢 Successfully delivered ticket {payload['seat']} to Grabroom!")
+                        logger.info(f"[GRABROOM] 🟢 Successfully saved ticket {payload['seat']} to Supabase!")
                         break # Break retry loop, move to next queue item
+                    elif resp.status_code == 409:
+                        # 409 means Conflict (Primary Key already exists). 
+                        # In case a seat is sniped again later, we can optionally handle an update here,
+                        # but for now, we just break so it doesn't get stuck in an infinite loop.
+                        logger.warning(f"[GRABROOM] ⚠️ Seat {payload['seat']} already exists in DB. Skipping.")
+                        break
                     else:
-                        logger.warning(f"[GRABROOM] ⚠️ Server returned {resp.status_code}. Retrying in 2s...")
+                        logger.warning(f"[GRABROOM] ⚠️ Supabase returned {resp.status_code}: {resp.text}. Retrying in 2s...")
                 except Exception as e:
-                    logger.error(f"[GRABROOM] ❌ Network error sending to Grabroom: {e}. Retrying in 2s...")
+                    logger.error(f"[GRABROOM] ❌ Network error sending to Supabase: {e}. Retrying in 2s...")
                 
                 time.sleep(2) # Cooldown before retry
                 
