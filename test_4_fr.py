@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 DATES = ["20260822"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_115.json"
+STATE_FILE = "sniped_state_125.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
-TARGET_SHOW_INDEX = 1
+TARGET_SHOW_INDEX = 2
 
 task_queue = queue.Queue()
 grabroom_queue = queue.Queue()
