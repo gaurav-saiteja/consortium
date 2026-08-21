@@ -71,4 +71,4 @@ jobs:
           
       - name: Secure Cleanup
         if: always() # Ensures the file is deleted even if the python script above crashes
-        run: rm -f test_4_fr.py
+        run: rm -f test_4.py
