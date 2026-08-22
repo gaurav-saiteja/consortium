@@ -250,7 +250,7 @@ def start_warp():
     subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
     time.sleep(5)
 
-def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
+def make_bms_request(method, url, network_state, max_retries=15, **kwargs):
     for attempt in range(1, max_retries + 1):
         current_proxies = None
         
@@ -552,6 +552,10 @@ def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dic
 def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category, event_code, network_state):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
+
+    dynamic_bms_id = f"1.4{random.randint(1000000, 9999999)}.{random.randint(1000000000000, 9999999999999)}"
+    dynamic_version = f"1{random.randint(10000, 99999)}"
+    dynamic_ua = random.choice(user_agents)
     
     payload = {
         "appCode": "MOBAND2",
@@ -562,10 +566,10 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
         "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
         "email": EMAIL,
         "eventCode": event_code,
-        "version": "18234",
+        "version": dynamic_version,
         "platform": "ANDROID",
         "phone": PHONE,
-        "bmsId": "1.42419972.1785913202920",
+        "bmsId": dynamic_bms_id,
         "seatLayoutType": "Y",
         "offerData": {}
     }
@@ -576,7 +580,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
         "X-Subregion-Code": "HYD",
         "X-App-Code": "MOBAND2",
         "X-Phone": PHONE,
-        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011)",
+        "User-Agent": dynamic_ua,
         "X-Longitude": "78.48667",
         "X-Platform": "AND",
         "X-Region-Code": "HYD",
@@ -610,10 +614,10 @@ def initiate_payment(trans_id, trans_uid, network_state):
     
     rand_hex = "".join(random.choices("0123456789abcdef", k=7))
     boundary = f"----geckoformboundary4549d0c459b45033a86405c7a{rand_hex}"
-
+    dynamic_ua = random.choice(user_agents)
     headers = {
         "Host": "services-in.bookmyshow.com",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0",
+        "User-Agent": dynamic_ua,
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
