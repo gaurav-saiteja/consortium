@@ -467,8 +467,8 @@ def layout_poller(session, start_time):
         str_data, status_code = fetch_seat_layout(s_id, poller_network)
         if not str_data:
             if status_code in [403, 429]:
-                logger.warning(f"    -> 🚧 [POLLER] WAF block persists after 5 retries (HTTP {status_code}). Initiating 200-second cooldown...")
-                time.sleep(320)
+                logger.warning(f"    -> 🚧 [POLLER] Persistent WAF block (HTTP {status_code}). Nuking poisoned thread...")
+                return  # Commit thread suicide
             else:
                 time.sleep(2) # Short 2 second delay before retrying a failed layout fetch
             continue
@@ -814,8 +814,21 @@ def main():
 
     # Block main thread, waiting until the poller finishes (either via Timeout or SIGTERM)
     try:
-        while poller_thread.is_alive():
-            poller_thread.join(1) # Block the main thread, check thread status every 1 second
+       while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+            if poller_thread.is_alive():
+                poller_thread.join(1) # Block the main thread, check thread status every 1 second
+            else:
+                # Thread died (returned due to WAF block)
+                logger.info("    -> ⏳ [MAIN] Poller thread dead. Initiating 320-second cooldown in main thread...")
+                time.sleep(320)
+                
+                logger.info("    -> 🚀 [MAIN] Cooldown complete. Respawning fresh layout poller thread...")
+                poller_thread = threading.Thread(
+                    target=layout_poller, 
+                    args=(main_session, start_time)
+                )
+                poller_thread.daemon = True
+                poller_thread.start()
     finally:
         # --- PHASE 4: Deferred Cleanup & Git Commit ---
         logger.info("\n🏁 Flushing queues. Waiting for Grabroom delivery to complete...")
