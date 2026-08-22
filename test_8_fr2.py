@@ -21,9 +21,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260825"]
+DATES = ["20260824"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_155.json"
+STATE_FILE = "sniped_state_105.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
@@ -31,6 +31,10 @@ TICKET_CATEGORY_2D = "0005"
 TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_TIME_START = "07:00 AM"
 TARGET_TIME_END = "11:59 PM"
+
+# --- NEW: CONTINUOUS LOCKING CONFIG ---
+MAX_LOCK_ATTEMPTS = 5
+COOLDOWN_SECONDS = 240
 
 MAX_WAVES = 5
 MAX_DYNAMIC_THREADS = 24
@@ -164,30 +168,6 @@ def load_state():
         except json.JSONDecodeError:
             logger.warning("Failed to decode local state JSON.")
     return {}
-
-def payment_worker(payment_queue, notif_queue, start_time):
-    logger.info("    -> [THREAD] 💸 Payment generator background thread active.")
-    processed_locks = 0
-    successful_qrs = 0
-    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        try:
-            p_data = payment_queue.get(timeout=2)
-            processed_locks += 1
-            logger.info(f"    -> 📊 [STATS] Payment Queue: {processed_locks} locked seats received so far.")
-            
-            upi_intent = initiate_payment(p_data["t_id"], p_data["t_uid"], p_data["network"])
-            if upi_intent:
-                successful_qrs += 1
-                logger.info(f"    -> 📊 [STATS] QR generated successfully: {successful_qrs}/{processed_locks} success rate.")
-                qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-                notif_queue.put({"msg": p_data["msg"], "attach_url": qr_url})
-            else:
-                logger.warning(f"    -> 📊 [STATS] Failed to generate QR! ({successful_qrs}/{processed_locks} success rate)")
-                notif_queue.put({"msg": p_data["msg"] + "\n\n⚠️ QR Generation Failed!"})
-            
-            payment_queue.task_done()
-        except queue.Empty:
-            continue
 
 def save_state_async(state_dict):
     def _background_save():
@@ -353,7 +333,7 @@ def find_target_session():
         
     return []
 
-def dynamic_sniper_worker(task_queue, payment_queue, wave_num):
+def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
     # Isolated network state per dynamic thread
     local_network = {"state": 0, "pool_proxy": None, "max_states": 3}
     
@@ -375,7 +355,7 @@ def dynamic_sniper_worker(task_queue, payment_queue, wave_num):
                 if upi_intent:
                     qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
                     msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
-                    payment_queue.put({"t_id": t_id, "t_uid": t_uid, "network": local_network, "msg": msg})
+                    notif_queue.put({"msg": msg, "attach_url": qr_url})
                     success = True
                     break
             time.sleep(1) # Delay between retries
@@ -399,8 +379,6 @@ def fetch_seat_layout(session_id, network_state):
         return resp.json().get("BookMyShow", {}).get("strData", "")
     except Exception: 
         return ""
-
-
 
 def parse_layout(str_data):
     if not str_data: return {}, {}, {}, 0
@@ -447,7 +425,7 @@ def parse_layout(str_data):
     total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
-def static_show_manager(session_id, my_seats, task_queue, payment_queue, state_dict, global_trigger, wave_barrier):
+def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier):
     # This thread stays alive for all remaining waves
     for wave_num in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
         
@@ -544,7 +522,6 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
     logger.error("    -> 🔴 [SNIPER] FAILED to lock seat.")
     return None, None
 
-
 def initiate_payment(trans_id, trans_uid, network_state):
     logger.info(f"    -> 💸 [SNIPER] Request 2: Initiating payment intent for {trans_id}...")
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
@@ -629,11 +606,6 @@ def main():
     state_dict = load_state()
     notif_queue = queue.Queue()
     task_queue = queue.Queue()
-    payment_queue = queue.Queue()
-
-    pay_t = threading.Thread(target=payment_worker, args=(payment_queue, notif_queue, start_time))
-    pay_t.daemon = True
-    pay_t.start()
     global_trigger = threading.Event()
     
     # --- Start Notification Worker ---
@@ -738,7 +710,7 @@ def main():
     for s_id, seats in seats_by_session.items():
         t = threading.Thread(
             target=static_show_manager, 
-            args=(s_id, seats, task_queue, payment_queue, state_dict, global_trigger, wave_barrier)
+            args=(s_id, seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier)
         )
         t.daemon = True
         t.start()
@@ -761,7 +733,7 @@ def main():
             # 2. Trigger flipped! Spawn dynamic threads to consume the queue
             logger.info(f"    -> 🌊 WAVE {wave} TRIGGERED! Spawning {MAX_DYNAMIC_THREADS} dynamic threads...")
             for _ in range(MAX_DYNAMIC_THREADS):
-                dt = threading.Thread(target=dynamic_sniper_worker, args=(task_queue, payment_queue, wave))
+                dt = threading.Thread(target=dynamic_sniper_worker, args=(task_queue, notif_queue, wave))
                 dt.daemon = True
                 dt.start()
                 
@@ -782,9 +754,6 @@ def main():
         logger.info("\n🏁 All 5 Waves completed successfully. Shutting down cleanly.")
         
     finally:
-        if not payment_queue.empty():
-            logger.info("⏳ Waiting for pending payments to generate...")
-            payment_queue.join()
         if not notif_queue.empty():
             logger.info("⏳ Waiting for remaining notifications to be sent...")
             notif_queue.join()
