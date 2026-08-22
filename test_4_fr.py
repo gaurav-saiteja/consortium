@@ -489,6 +489,8 @@ def layout_poller(session, start_time):
             
         current_seats, categories_map, seat_metadata, total_avail = parse_layout(str_data)
         logger.info(f"    -> [POLL] Session {s_id} | Total available seats: {total_avail}")
+
+        dispatched_tasks = False  # <-- NEW: Track if we found seats
         
         with state_lock:
             for target_row, target_seat_list in DESIRED_SEATS.items():
@@ -515,7 +517,13 @@ def layout_poller(session, start_time):
                                     logger.info("    -> [DISPATCHER] Threads busy! Spawned new Worker Thread.")
                                     
                             task_queue.put(task)
-                            
+                            dispatched_tasks = True  # <-- NEW: Flag that tasks are sent
+
+        # <-- NEW: Pre-emptive Nuke Logic
+        if dispatched_tasks:
+            logger.info("    -> ⚠️ [POLLER] Tasks dispatched! Pre-emptively nuking poller thread to avoid crossfire WAF blocks...")
+            return 
+            
         time.sleep(20) # 20 second hard cooldown between layout polls
 
 # =======================================================
@@ -832,9 +840,9 @@ def main():
             if poller_thread.is_alive():
                 poller_thread.join(1) # Block the main thread, check thread status every 1 second
             else:
-                # Thread died (returned due to WAF block)
-                logger.info("    -> ⏳ [MAIN] Poller thread dead. Initiating 320-second cooldown in main thread...")
-                time.sleep(320)
+                # Thread died (pre-emptively nuked or WAF block)
+                logger.info("    -> ⏳ [MAIN] Poller thread dead. Initiating 7-minute (420s) cooldown before respawning...")
+                time.sleep(420)  # <-- Changed to 7 minutes
                 
                 logger.info("    -> 🚀 [MAIN] Cooldown complete. Respawning fresh layout poller thread...")
                 poller_thread = threading.Thread(
