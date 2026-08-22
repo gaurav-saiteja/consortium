@@ -30,7 +30,7 @@ TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_TIME_START = "07:00 AM"
-TARGET_TIME_END = "11:59 PM"
+TARGET_TIME_END = "09:19 AM"
 
 # --- NEW: CONTINUOUS LOCKING CONFIG ---
 MAX_WAVES = 5
@@ -44,8 +44,15 @@ PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
-    "A": ["3","4","5", "6", "7", "8"],
-    "N": ["23", "24"]
+    "N": ["47", "46", "45"],
+    "M": ["47", "46", "45", "23", "24"],
+    "L": ["47", "46", "45"],
+    "K": ["47", "46", "45"],
+    "J": ["47", "46", "45"],
+    "I": ["47", "46", "45"],
+    "G": ["47", "46", "45"],
+    "H": ["47", "46", "45"],
+    "F": ["47", "46", "45"]
 }
 
 PROXY_POOL = []
