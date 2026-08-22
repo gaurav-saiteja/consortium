@@ -31,7 +31,7 @@ TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_SHOW_INDEX = 2
 
 # --- GITHUB RUNNER CONFIGURATION ---
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_TOKEN = os.environ.get("TOKEN_GITHUB")
 REPO_OWNER = "gaurav-saiteja"
 REPO_NAME = "consortium"
 WORKFLOW_FILENAME = "main2.yml" # e.g., main.yml
