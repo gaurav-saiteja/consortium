@@ -49,6 +49,7 @@ TOPIC = os.environ.get("NTFY_TOPIC")
 
 SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkcXhhZnlxcWtoeHVpcHpjamNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyOTYzNzIsImV4cCI6MjEwMjg3MjM3Mn0.dAerrc1sTh8CSnY6vZ4NtuvPXWNwjsHCl9gWZ436MLk"
+grabroom_queue = queue.Queue()
 
 DESIRED_SEATS = {
     "N": ["47", "46", "45"],
