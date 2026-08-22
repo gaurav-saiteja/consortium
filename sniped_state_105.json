@@ -1,0 +1,510 @@
+{
+  "completed_waves": 0,
+  "last_wave_finish_timestamp": 0,
+  "available_seats": {
+    "255046_A_3": {
+      "session_id": "255046",
+      "row": "A",
+      "seat_num": "3",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0139"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255046_A_4": {
+      "session_id": "255046",
+      "row": "A",
+      "seat_num": "4",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0138"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255046_A_5": {
+      "session_id": "255046",
+      "row": "A",
+      "seat_num": "5",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0137"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255046_A_6": {
+      "session_id": "255046",
+      "row": "A",
+      "seat_num": "6",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0136"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255046_A_7": {
+      "session_id": "255046",
+      "row": "A",
+      "seat_num": "7",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0135"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255046_A_8": {
+      "session_id": "255046",
+      "row": "A",
+      "seat_num": "8",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0134"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255047_A_3": {
+      "session_id": "255047",
+      "row": "A",
+      "seat_num": "3",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0139"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255047_A_4": {
+      "session_id": "255047",
+      "row": "A",
+      "seat_num": "4",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0138"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255047_A_5": {
+      "session_id": "255047",
+      "row": "A",
+      "seat_num": "5",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0137"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255047_A_6": {
+      "session_id": "255047",
+      "row": "A",
+      "seat_num": "6",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0136"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255047_A_7": {
+      "session_id": "255047",
+      "row": "A",
+      "seat_num": "7",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0135"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255047_A_8": {
+      "session_id": "255047",
+      "row": "A",
+      "seat_num": "8",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0134"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255048_A_3": {
+      "session_id": "255048",
+      "row": "A",
+      "seat_num": "3",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0139"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255048_A_4": {
+      "session_id": "255048",
+      "row": "A",
+      "seat_num": "4",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0138"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255048_A_5": {
+      "session_id": "255048",
+      "row": "A",
+      "seat_num": "5",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0137"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255048_A_6": {
+      "session_id": "255048",
+      "row": "A",
+      "seat_num": "6",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0136"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255048_A_7": {
+      "session_id": "255048",
+      "row": "A",
+      "seat_num": "7",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0135"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255048_A_8": {
+      "session_id": "255048",
+      "row": "A",
+      "seat_num": "8",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0134"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255049_A_3": {
+      "session_id": "255049",
+      "row": "A",
+      "seat_num": "3",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0139"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255049_A_4": {
+      "session_id": "255049",
+      "row": "A",
+      "seat_num": "4",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0138"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255049_A_5": {
+      "session_id": "255049",
+      "row": "A",
+      "seat_num": "5",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0137"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255049_A_6": {
+      "session_id": "255049",
+      "row": "A",
+      "seat_num": "6",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0136"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255049_A_7": {
+      "session_id": "255049",
+      "row": "A",
+      "seat_num": "7",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0135"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255049_A_8": {
+      "session_id": "255049",
+      "row": "A",
+      "seat_num": "8",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0134"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255050_A_3": {
+      "session_id": "255050",
+      "row": "A",
+      "seat_num": "3",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0139"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255050_A_4": {
+      "session_id": "255050",
+      "row": "A",
+      "seat_num": "4",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0138"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255050_A_5": {
+      "session_id": "255050",
+      "row": "A",
+      "seat_num": "5",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0137"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255050_A_6": {
+      "session_id": "255050",
+      "row": "A",
+      "seat_num": "6",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0136"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255050_A_7": {
+      "session_id": "255050",
+      "row": "A",
+      "seat_num": "7",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0135"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255050_A_8": {
+      "session_id": "255050",
+      "row": "A",
+      "seat_num": "8",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0134"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034"
+    },
+    "255051_A_3": {
+      "session_id": "255051",
+      "row": "A",
+      "seat_num": "3",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0139"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255051_A_4": {
+      "session_id": "255051",
+      "row": "A",
+      "seat_num": "4",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0138"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255051_A_5": {
+      "session_id": "255051",
+      "row": "A",
+      "seat_num": "5",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0137"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255051_A_6": {
+      "session_id": "255051",
+      "row": "A",
+      "seat_num": "6",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0136"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255051_A_7": {
+      "session_id": "255051",
+      "row": "A",
+      "seat_num": "7",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0135"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    },
+    "255051_A_8": {
+      "session_id": "255051",
+      "row": "A",
+      "seat_num": "8",
+      "meta": {
+        "block_code": "A",
+        "row_index": "14",
+        "backend_seat": "0134"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600"
+    }
+  }
+}
