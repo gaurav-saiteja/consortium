@@ -30,6 +30,13 @@ TICKET_CATEGORY_2D = "0005"
 TARGET_ATTRIBUTE = "PCX SCREEN"
 TARGET_SHOW_INDEX = 2
 
+# --- GITHUB RUNNER CONFIGURATION ---
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+REPO_OWNER = "gaurav-saiteja"
+REPO_NAME = "consortium"
+WORKFLOW_FILENAME = "main2.yml" # e.g., main.yml
+fatal_waf_block = False
+
 task_queue = queue.Queue()
 grabroom_queue = queue.Queue()
 GRABROOM_WEBHOOK_URL = os.environ.get("GRABROOM_WEBHOOK_URL", "https://your-cloudflare-worker.workers.dev/api/ticket")
@@ -254,6 +261,29 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
                 time.sleep(3) # 3 second cooldown before retrying the failed network request
                 continue
     return None
+
+def respawn_github_runner():
+    if not GITHUB_TOKEN:
+        logger.error("[GITHUB] GITHUB_TOKEN not found in environment! Cannot respawn runner.")
+        return
+    
+    logger.info("[GITHUB] 🔄 Triggering a fresh GitHub Actions runner...")
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows/{WORKFLOW_FILENAME}/dispatches"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    payload = {"ref": "main"}
+    
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        if resp.status_code == 204:
+            logger.info("[GITHUB] ✅ Successfully dispatched new runner on a fresh IP!")
+        else:
+            logger.error(f"[GITHUB] ❌ Failed to dispatch runner. Status: {resp.status_code}, Response: {resp.text}")
+    except Exception as e:
+        logger.error(f"[GITHUB] ❌ Exception triggering GitHub Action: {e}")
 
 # =======================================================
 # PHASE 1: SHOWTIME MONITORING (USING VENUE API)
@@ -481,7 +511,9 @@ def layout_poller(session, start_time):
         str_data, status_code = fetch_seat_layout(s_id, poller_network)
         if not str_data:
             if status_code in [403, 429]:
-                logger.warning(f"    -> 🚧 [POLLER] Persistent WAF block (HTTP {status_code}). Nuking poisoned thread...")
+                logger.warning(f"    -> 🚧 [POLLER] Persistent WAF block (HTTP {status_code}). Setting fatal flag and nuking thread...")
+                global fatal_waf_block
+                fatal_waf_block = True
                 return  # Commit thread suicide
             else:
                 time.sleep(2) # Short 2 second delay before retrying a failed layout fetch
@@ -840,17 +872,23 @@ def main():
             if poller_thread.is_alive():
                 poller_thread.join(1) # Block the main thread, check thread status every 1 second
             else:
-                # Thread died (pre-emptively nuked or WAF block)
-                logger.info("    -> ⏳ [MAIN] Poller thread dead. Initiating 7-minute (420s) cooldown before respawning...")
-                time.sleep(420)  # <-- Changed to 7 minutes
-                
-                logger.info("    -> 🚀 [MAIN] Cooldown complete. Respawning fresh layout poller thread...")
-                poller_thread = threading.Thread(
-                    target=layout_poller, 
-                    args=(main_session, start_time)
-                )
-                poller_thread.daemon = True
-                poller_thread.start()
+                global fatal_waf_block
+                if fatal_waf_block:
+                    logger.warning("    -> 💀 [MAIN] Fatal WAF block detected. Triggering new GitHub Runner and exiting current run...")
+                    respawn_github_runner()
+                    break # Break the loop to jump to finally block, save Git state, and exit gracefully
+                else:
+                    # Thread died from pre-emptive nuke (seats were dispatched)
+                    logger.info("    -> ⏳ [MAIN] Poller thread pre-emptively nuked. Initiating 7-minute (420s) cooldown on this machine...")
+                    time.sleep(420)
+                    
+                    logger.info("    -> 🚀 [MAIN] Cooldown complete. Respawning fresh layout poller thread...")
+                    poller_thread = threading.Thread(
+                        target=layout_poller, 
+                        args=(main_session, start_time)
+                    )
+                    poller_thread.daemon = True
+                    poller_thread.start()
     finally:
         # --- PHASE 4: Deferred Cleanup & Git Commit ---
         logger.info("\n🏁 Flushing queues. Waiting for Grabroom delivery to complete...")
