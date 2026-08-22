@@ -143,6 +143,14 @@ def generate_headers(is_post=False):
         "Accept-Encoding": "gzip, deflate"
     }
 
+def are_dates_valid():
+    """Checks if there is at least one date in DATES that is today or in the future."""
+    current_date_int = int(datetime.now().strftime("%Y%m%d"))
+    for d in DATES:
+        if int(d) >= current_date_int:
+            return True
+    return False
+
 def humanize_date(date_str):
     if not date_str or len(date_str) != 8:
         return date_str
@@ -819,6 +827,9 @@ def main():
 
     if not target_sessions:
         logger.info("🏁 Max runtime reached before shows were listed. Shutting down.")
+        if are_dates_valid():
+            logger.info("    -> 🔄 Target date(s) still valid! Triggering chaining runner to continue monitoring...")
+            respawn_github_runner()
         return
 
     # --- INITIALIZE DICTIONARY STATE ---
@@ -889,6 +900,13 @@ def main():
                     )
                     poller_thread.daemon = True
                     poller_thread.start()
+                    
+        # --- Handle Natural Timeout (5h 55m limit) ---
+        if (time.time() - start_time) >= MAX_RUNTIME_SECONDS:
+            logger.info("🏁 Max runtime limit reached during active layout polling.")
+            if are_dates_valid():
+                logger.info("    -> 🔄 Target date(s) still valid! Triggering chaining runner to continue 24/7 polling...")
+                respawn_github_runner()
     finally:
         # --- PHASE 4: Deferred Cleanup & Git Commit ---
         logger.info("\n🏁 Flushing queues. Waiting for Grabroom delivery to complete...")
