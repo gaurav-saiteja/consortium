@@ -33,12 +33,8 @@ TARGET_TIME_START = "07:00 AM"
 TARGET_TIME_END = "11:59 PM"
 
 # --- NEW: CONTINUOUS LOCKING CONFIG ---
-MAX_LOCK_ATTEMPTS = 5
-COOLDOWN_SECONDS = 240
-
 MAX_WAVES = 5
 MAX_DYNAMIC_THREADS = 24
-STATIC_THREADS = 6
 IDLE_TIMEOUT = 30
 MAX_SEAT_RETRIES = 7
 
@@ -59,7 +55,6 @@ if raw_proxies:
         parts = line.strip().split(":")
         if len(parts) == 4:
             ip, port, user, pwd = parts
-            # curl_cffi requires the http://username:password@ip:port format
             PROXY_POOL.append(f"http://{user}:{pwd}@{ip}:{port}")
 
 PROXIES = {
@@ -68,7 +63,6 @@ PROXIES = {
 }
 
 user_agents = [
-    # --- Original 15 User Agents ---
     "Mozilla/5.0 (Linux; U; Android 16;zh-cn; TB375FC Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.7389.0 MobileLenovoBrowser/9.2.7 Mobile Safari/537.36",
     "Mozilla/5.0 (Linux; Android 8.1.0; vivo Y83) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Mobile Safari/537.36",
     "Mozilla/5.0 (Linux; Android 14; Infinix X6532 Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36",
@@ -84,21 +78,21 @@ user_agents = [
     "Mozilla/5.0 (Linux; Android 10; A001SH) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Mobile Safari/537.36",
     "Mozilla/5.0 (Linux; Android 13; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
     "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Samsung Galaxy S24 Ultra
-    "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36", # Google Pixel 8 Pro
-    "Mozilla/5.0 (Linux; Android 14; CPH2581) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36", # OnePlus 12
-    "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.110 Mobile Safari/537.36", # Samsung Galaxy A54 5G
-    "Mozilla/5.0 (Linux; Android 13; 22101316G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.119 Mobile Safari/537.36", # Xiaomi Redmi Note 12 Pro
-    "Mozilla/5.0 (Linux; Android 14; A065) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Nothing Phone (2)
-    "Mozilla/5.0 (Linux; Android 13; CPH2525) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.178 Mobile Safari/537.36", # Oppo Reno 10 Pro
-    "Mozilla/5.0 (Linux; Android 13; RMX3561) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.100 Mobile Safari/537.36", # Realme GT Neo 3
-    "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Google Pixel 6a
-    "Mozilla/5.0 (Linux; Android 14; V2324A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.113 Mobile Safari/537.36", # Vivo X100 Pro
-    "Mozilla/5.0 (Linux; Android 14; SM-F946B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Samsung Galaxy Z Fold 5
-    "Mozilla/5.0 (Linux; Android 14; XQ-DQ72) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Mobile Safari/537.36", # Sony Xperia 1 V
-    "Mozilla/5.0 (Linux; Android 13; motorola edge 40 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36", # Motorola Edge 40 Neo
-    "Mozilla/5.0 (Linux; Android 14; 23049PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Poco F5
-    "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Safari/537.36" # Samsung Galaxy Tab S9 (Tablet)
+    "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; CPH2581) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.110 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; 22101316G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.119 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; A065) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; CPH2525) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.178 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; RMX3561) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.100 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; V2324A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.113 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; SM-F946B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; XQ-DQ72) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; motorola edge 40 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; 23049PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Safari/537.36"
 ]
 
 def generate_headers(is_post=False):
@@ -133,7 +127,6 @@ def notification_worker(notif_queue, start_time):
     logger.info("    -> [THREAD] 🔔 Notification sender background thread active.")
     while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
         try:
-            # Block for up to 2 seconds waiting for an item in the queue
             notif_data = notif_queue.get(timeout=2)
             trigger_ntfy(notif_data["msg"], attach_url=notif_data.get("attach_url"))
             notif_queue.task_done()
@@ -171,7 +164,6 @@ def load_state():
         try:
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
-                # Ensure it's the new format
                 if "available_seats" in data:
                     return data
         except json.JSONDecodeError:
@@ -197,46 +189,7 @@ def save_state_async(state_dict):
             else:
                 return
     
-    # Fire and forget thread
     threading.Thread(target=_background_save, daemon=True).start()
-
-def save_state(sniped_dict):
-    logger.info("\n[GIT] State mutated. Saving sniped seat state to Git...")
-    for attempt in range(3):
-        quiet_git_pull()
-        with open(STATE_FILE, "w") as f:
-            json.dump(sniped_dict, f, indent=2)
-            
-        subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
-        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-        
-        if STATE_FILE in status.stdout:
-            commit_res = subprocess.run(["git", "commit", "-m", "Update sniped seats state"], capture_output=True, text=True, check=False)
-            if commit_res.returncode != 0:
-                logger.warning(f"[GIT] Commit warning/error: {commit_res.stderr.strip()}")
-                
-            if quiet_git_push(): 
-                logger.info("[STATE] ✅ State successfully saved and pushed to remote.")
-                return
-            logger.warning(f"Git push failed on attempt {attempt+1}/3. Retrying...")
-            time.sleep(2)
-        else:
-            return
-    logger.error("❌ Failed to push state updates after 3 attempts.")
-
-def state_saver_worker(sniped_memory, state_lock, mutated_flag, start_time):
-    logger.info("    -> [THREAD] 💾 State saver background thread active.")
-    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        time.sleep(15) # Check for mutations every 15 seconds
-        
-        if mutated_flag[0]: # If the dirty flag was flipped by a sniper thread
-            # 1. Acquire lock just long enough to make a deep copy and reset the flag
-            with state_lock:
-                local_copy = dict(sniped_memory)
-                mutated_flag[0] = False
-                
-            # 2. Release lock immediately, THEN do the slow Git operations
-            save_state(local_copy)
 
 def trigger_ntfy(message, attach_url=None):
     logger.info(f"🔔 ALERTING VIA NTFY:\n{message}")
@@ -257,43 +210,9 @@ def start_warp():
     subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
     time.sleep(5)
 
-def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
-    # Isolated network state per dynamic thread
-    local_network = {"state": 0, "pool_proxy": None, "max_states": 3}
-    
-    while True:
-        try:
-            # Self-destruct if idle for 30 seconds
-            task = task_queue.get(timeout=IDLE_TIMEOUT)
-        except queue.Empty:
-            logger.debug("    -> 💀 Dynamic thread idle for 30s. Self-destructing.")
-            return
-
-        s_id, meta, c_code, a_id, t_cat, e_code = task["session_id"], task["meta"], task["c_code"], task["a_id"], task["ticket_category"], task["event_code"]
-        
-        success = False
-        for attempt in range(MAX_SEAT_RETRIES):
-            t_id, t_uid = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
-            if t_id:
-                upi_intent = initiate_payment(t_id, t_uid, local_network)
-                if upi_intent:
-                    qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-                    msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
-                    notif_queue.put({"msg": msg, "attach_url": qr_url})
-                    success = True
-                    break
-            time.sleep(1) # Delay between retries
-            
-        if not success:
-            logger.warning(f"    -> ❌ Seat {task['row']}{task['seat_num']} exhausted {MAX_SEAT_RETRIES} retries. Declared dead for Wave {wave_num}.")
-
-        task_queue.task_done()
-
 def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
     for attempt in range(1, max_retries + 1):
         current_proxies = None
-        
-        # State Machine: 0 (Raw IP), 1 (WARP), 2 (Pool Proxy)
         if network_state["state"] == 1:
             current_proxies = PROXIES
         elif network_state["state"] == 2:
@@ -314,14 +233,9 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
                 logger.warning(f"    -> 🚧 WAF Block (HTTP {resp.status_code}) on {method}. Thread jumping network state. (Attempt {attempt}/{max_retries})")
                 if attempt < max_retries:
                     max_states = network_state.get("max_states", 3)
-                    
-                    # Jumping Loop:
-                    # If max_states=2: 0 -> 1 -> 0
-                    # If max_states=3: 0 -> 1 -> 2 -> 0
                     network_state["state"] = (network_state["state"] + 1) % max_states
-                    
                     if network_state["state"] == 2:
-                        network_state["pool_proxy"] = None # Force a new random proxy to be picked next loop
+                        network_state["pool_proxy"] = None
                     time.sleep(1)
                     continue
             return resp
@@ -332,13 +246,9 @@ def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
                 continue
     return None
 
-# =======================================================
-# PHASE 1: SHOWTIME MONITORING (USING VENUE API)
-# =======================================================
 def find_target_session():
     network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
     try:
-        # Convert strings like "12:00 PM" into datetime.time objects for mathematical comparison
         target_time_start_obj = datetime.strptime(TARGET_TIME_START, "%I:%M %p").time()
         target_time_end_obj = datetime.strptime(TARGET_TIME_END, "%I:%M %p").time()
     except Exception as e:
@@ -350,7 +260,6 @@ def find_target_session():
     for date_code in DATES:
         url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
         resp = make_bms_request('GET', url, network_state=network_state, headers=generate_headers(is_post=False))
-        logger.info(f"{resp.status_code}")
         if not resp or resp.status_code != 200: 
             continue
             
@@ -362,15 +271,12 @@ def find_target_session():
             
             for show_detail in show_details_list:
                 for event in show_detail.get("Event", []):
-                    # Check both parent and child level for the matching Movie Code
                     parent_code = event.get("EventCode", "")
                     for child in event.get("ChildEvents", []):
-                        # Extract the event code dynamically (prioritize child code, fallback to parent)
                         current_event_code = child.get("EventCode", parent_code)
                         current_event_dimension = child.get("EventDimension", "")
                         
                         for show in child.get("ShowTimes", []):
-                            # --- NEW: Constraint Check 0: Strict Date Verification ---
                             s_date_code = show.get("ShowDateCode", "")
                             if s_date_code != date_code:
                                 if not fallback_logged:
@@ -379,8 +285,6 @@ def find_target_session():
                                 continue
                             
                             s_attr = show.get("Attributes", "")
-                            
-                            # 1. Constraint Check: Screen Attribute
                             if TARGET_ATTRIBUTE.lower() not in s_attr.lower():
                                 continue
                                 
@@ -390,7 +294,6 @@ def find_target_session():
                             except:
                                 continue
                             
-                            # 2. Constraint Check: Time Range
                             if target_time_start_obj <= s_time_obj <= target_time_end_obj:
                                 valid_shows.append({
                                     "sessionId": show.get("SessionId"),
@@ -408,18 +311,14 @@ def find_target_session():
             
     if valid_shows:
         valid_shows.sort(key=lambda x: x["datetime_obj"])
-        return valid_shows[:6]  # <-- Returns up to 5 shows
+        return valid_shows[:6]
         
     return []
 
-# =======================================================
-# PHASE 2 & 3: THREAD WORKER / LAYOUT PARSING
-# =======================================================
 def fetch_seat_layout(session_id, network_state):
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
     resp = make_bms_request('POST', url, network_state=network_state, headers=generate_headers(is_post=True), data=payload)
-    logger.info(f"{resp.status_code}")
     if not resp or resp.status_code != 200: 
         return ""
     try: 
@@ -472,197 +371,6 @@ def parse_layout(str_data):
     total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
     return available_seats_by_row, categories, seat_metadata, total_available_seats
 
-def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mutated_flag, notif_queue, shared_wave_state):
-    layout_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
-    snipe_network_state = {"state": 0, "pool_proxy": None, "max_states": 3}
-    s_id = session["sessionId"]
-    
-    logger.info(f"    -> [THREAD] 🚀 Started Session {s_id} ({session['time']}) - WAVE 1 (Initial Discovery)")
-    
-    # my_roster stores the static backend data required to lock a seat without needing the layout API again
-    my_roster = {} 
-
-    # ==========================================
-    # WAVE 1: INITIAL DISCOVERY & LOCKING
-    # ==========================================
-    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        str_data = fetch_seat_layout(s_id, layout_network_state)
-        if str_data: break
-        time.sleep(2)
-        
-    current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
-    ticket_category = "0009" if "3D" in session.get("eventDimension", "").upper() else "0006"
-
-    for target_row, target_seat_list in DESIRED_SEATS.items():
-        if target_row not in current_seats: continue
-            
-        for target_seat in target_seat_list:
-            if target_seat in current_seats[target_row]:
-                seat_key = f"{s_id}_{target_row}_{target_seat}"
-                meta = seat_metadata.get(f"{target_row}_{target_seat}")
-                if not meta: continue
-                    
-                cat_info = categories_map.get(meta["block_code"])
-                if not cat_info: continue
-                c_code, a_id = cat_info["cat_code"], cat_info["area_id"]
-                
-                # Wave 1: 5-Retry Blocking Loop
-                success = False
-                for attempt in range(5):
-                    t_id, t_uid = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], snipe_network_state)
-                    if t_id:
-                        upi_intent = initiate_payment(t_id, t_uid, snipe_network_state)
-                        if upi_intent:
-                            success = True
-                            qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-                            msg = f"[WAVE 1] Row {target_row} Seat {target_seat} is locked.\n\n{VENUE_CODE} {session['eventCode']} {humanize_date(session['dateCode'])} {session['time']}"
-                            notif_queue.put({"msg": msg, "attach_url": qr_url})
-                            break
-                    time.sleep(2) # Delay between retries
-                
-                if success:
-                    # Save seat properties to local roster so we never need the layout API again
-                    my_roster[seat_key] = {
-                        "row": target_row, "seat_num": target_seat,
-                        "meta": meta, "c_code": c_code, "a_id": a_id, "ticket_category": ticket_category
-                    }
-                    with state_lock:
-                        sniped_memory[seat_key] = sniped_memory.get(seat_key, 0) + 1
-                        mutated_flag[0] = True
-
-    # ==========================================
-    # WAVES 2 TO 5: COOLDOWN -> WARMUP -> LOCK
-    # ==========================================
-    for wave_num in range(2, 6):
-        if not my_roster:
-            logger.info(f"    -> 🛑 Thread for {s_id} has 0 seats in roster. Terminating early.")
-            return
-
-        # 1. COOLDOWN STATE
-        logger.info(f"    -> 💤 Session {s_id} entering Wave {wave_num} Cooldown (14m 30s)...")
-        time.sleep(870)
-
-        snipe_network_state["state"] = 0
-        snipe_network_state["pool_proxy"] = None
-        logger.info(f"    -> 🔄 Session {s_id} network state reset to Raw IP (State 0).")
-
-        # 2. WARMUP STATE
-        logger.info(f"    -> 🔥 Session {s_id} entering Wave {wave_num} Warmup State...")
-        roster_keys = list(my_roster.keys())
-        random.shuffle(roster_keys)
-        warmup_success_key = None
-        
-        while True:
-            # Check for Global Trigger from another thread
-            if shared_wave_state["current_wave"] >= wave_num:
-                logger.info(f"    -> 🚨 Global Trigger detected! Session {s_id} snapping out of Warmup!")
-                break
-
-            # Pick next random seat, cycle it to the back of the line
-            test_key = roster_keys.pop(0)
-            roster_keys.append(test_key)
-            seat_data = my_roster[test_key]
-            
-            t_id, t_uid = lock_seat(s_id, seat_data["meta"]["row_index"], seat_data["meta"]["backend_seat"], seat_data["c_code"], seat_data["a_id"], seat_data["ticket_category"], session["eventCode"], snipe_network_state)
-            if t_id:
-                upi_intent = initiate_payment(t_id, t_uid, snipe_network_state)
-                if upi_intent:
-                    # GLOBAL TRIGGER ACTIVATED
-                    shared_wave_state["current_wave"] = wave_num
-                    warmup_success_key = test_key
-                    
-                    qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-                    msg = f"[WAVE {wave_num}] Row {seat_data['row']} Seat {seat_data['seat_num']} is locked.\n\n{VENUE_CODE} {session['eventCode']} {humanize_date(session['dateCode'])} {session['time']}"
-                    notif_queue.put({"msg": msg, "attach_url": qr_url})
-
-                    with state_lock:
-                        sniped_memory[test_key] = sniped_memory.get(test_key, 0) + 1
-                        mutated_flag[0] = True
-                    
-                    logger.info(f"    -> 🎯 Warmup SUCCESS on {test_key}! Fired Global Trigger for Wave {wave_num}!")
-                    break
-                    
-            time.sleep(3) # Warmup hammer cooldown
-            
-        # 3. MAIN BLOCKING PHASE
-        logger.info(f"    -> 🌊 Session {s_id} starting Wave {wave_num} Main Blocking Phase...")
-        keys_to_process = list(my_roster.keys())
-        if warmup_success_key in keys_to_process:
-            keys_to_process.remove(warmup_success_key) # Don't re-lock the seat we just got in warmup
-            
-        for key in keys_to_process:
-            seat_data = my_roster[key]
-            success = False
-            
-            # 5-Retry Window for normal wave
-            for attempt in range(5):
-                t_id, t_uid = lock_seat(s_id, seat_data["meta"]["row_index"], seat_data["meta"]["backend_seat"], seat_data["c_code"], seat_data["a_id"], seat_data["ticket_category"], session["eventCode"], snipe_network_state)
-                if t_id:
-                    upi_intent = initiate_payment(t_id, t_uid, snipe_network_state)
-                    if upi_intent:
-                        success = True
-                        qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-                        msg = f"[WAVE {wave_num}] Row {seat_data['row']} Seat {seat_data['seat_num']} is locked.\n\n{VENUE_CODE} {session['eventCode']} {humanize_date(session['dateCode'])} {session['time']}"
-                        notif_queue.put({"msg": msg, "attach_url": qr_url})
-
-                        with state_lock:
-                            sniped_memory[key] = sniped_memory.get(key, 0) + 1
-                            mutated_flag[0] = True
-                        break
-                time.sleep(2) # Retry delay
-                
-            if not success:
-                logger.warning(f"    -> ❌ Session {s_id} Seat {key} failed 5 times in Wave {wave_num}. Dropping from state.")
-                del my_roster[key] # Remove from thread roster
-                with state_lock:
-                    if key in sniped_memory:
-                        del sniped_memory[key] # Remove from Git Memory
-                    mutated_flag[0] = True
-
-    logger.info(f"    -> 🏁 Session {s_id} finished all 5 Waves. Terminating thread.")
-
-def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier):
-    # This thread stays alive for all remaining waves
-    for wave_num in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
-        
-        # 1. Cooldown Check
-        time_passed = time.time() - state_dict["last_wave_finish_timestamp"]
-        if state_dict["last_wave_finish_timestamp"] > 0 and time_passed < 870:
-            sleep_time = 870 - time_passed
-            logger.info(f"    -> 💤 Static Thread {session_id} waiting {int(sleep_time)}s for Wave {wave_num} cooldown...")
-            time.sleep(sleep_time)
-
-        # 2. Warmup Phase
-        logger.info(f"    -> 🔥 Static Thread {session_id} entering Warmup for Wave {wave_num}...")
-        warmup_network = {"state": 0, "pool_proxy": None, "max_states": 2}
-        roster = list(my_seats.values())
-        
-        if roster:
-            while not global_trigger.is_set():
-                test_seat = random.choice(roster)
-                t_id, t_uid = lock_seat(session_id, test_seat["meta"]["row_index"], test_seat["meta"]["backend_seat"], test_seat["c_code"], test_seat["a_id"], test_seat["ticket_category"], test_seat["event_code"], warmup_network)
-                if t_id:
-                    # SUCCESS! Fire the global trigger!
-                    global_trigger.set()
-                    upi = initiate_payment(t_id, t_uid, warmup_network)
-                    if upi:
-                        msg = f"[WAVE {wave_num} WARMUP] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
-                        notif_queue.put({"msg": msg})
-                    break
-                time.sleep(3)
-        
-        # 3. Main Locking Triggered - Dump seats to queue
-        # Wait until someone triggers the event (if this thread didn't)
-        global_trigger.wait() 
-        for seat in roster:
-            task_queue.put(seat)
-            
-        # 4. Wait for all 6 static threads AND the main thread to reach this barrier before continuing to next wave
-        wave_barrier.wait()
-
-# =======================================================
-# PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
-# =======================================================
 def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category, event_code, network_state):
     logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
     url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
@@ -702,7 +410,6 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
 
     data_str = json.dumps(payload, separators=(',', ':'))
     resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=data_str.encode('utf-8'))
-    logger.info(f"{resp.status_code}")
     if resp and resp.status_code == 200:
         try:
             r_json = resp.json()
@@ -766,7 +473,6 @@ def initiate_payment(trans_id, trans_uid, network_state):
     
     payload_str = '\r\n'.join(form_fields)
     resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=payload_str.encode('utf-8'))
-    logger.info(f"{resp.status_code}")
     if resp and resp.status_code == 200:
         try:
             data = resp.json()
@@ -783,83 +489,218 @@ def initiate_payment(trans_id, trans_uid, network_state):
     logger.error("    -> 🔴 [SNIPER] FAILED to generate payment intent.")
     return None
 
-# =======================================================
-# MAIN LOOP STATE MACHINE
-# =======================================================
+def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
+    local_network = {"state": 0, "pool_proxy": None, "max_states": 3}
+    while True:
+        try:
+            task = task_queue.get(timeout=IDLE_TIMEOUT)
+        except queue.Empty:
+            logger.debug("    -> 💀 Dynamic thread idle for 30s. Self-destructing.")
+            return
+
+        s_id, meta, c_code, a_id, t_cat, e_code = task["session_id"], task["meta"], task["c_code"], task["a_id"], task["ticket_category"], task["event_code"]
+        
+        success = False
+        for attempt in range(MAX_SEAT_RETRIES):
+            t_id, t_uid = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
+            if t_id:
+                upi_intent = initiate_payment(t_id, t_uid, local_network)
+                if upi_intent:
+                    qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
+                    msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
+                    notif_queue.put({"msg": msg, "attach_url": qr_url})
+                    success = True
+                    break
+            time.sleep(1)
+            
+        if not success:
+            logger.warning(f"    -> ❌ Seat {task['row']}{task['seat_num']} exhausted {MAX_SEAT_RETRIES} retries. Declared dead for Wave {wave_num}.")
+
+        task_queue.task_done()
+
+def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier):
+    for wave_num in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
+        
+        time_passed = time.time() - state_dict["last_wave_finish_timestamp"]
+        if state_dict["last_wave_finish_timestamp"] > 0 and time_passed < 870:
+            sleep_time = 870 - time_passed
+            logger.info(f"    -> 💤 Static Thread {session_id} waiting {int(sleep_time)}s for Wave {wave_num} cooldown...")
+            time.sleep(sleep_time)
+
+        logger.info(f"    -> 🔥 Static Thread {session_id} entering Warmup for Wave {wave_num}...")
+        warmup_network = {"state": 0, "pool_proxy": None, "max_states": 2}
+        roster = list(my_seats.values())
+        
+        if roster:
+            while not global_trigger.is_set():
+                test_seat = random.choice(roster)
+                t_id, t_uid = lock_seat(session_id, test_seat["meta"]["row_index"], test_seat["meta"]["backend_seat"], test_seat["c_code"], test_seat["a_id"], test_seat["ticket_category"], test_seat["event_code"], warmup_network)
+                if t_id:
+                    global_trigger.set()
+                    upi = initiate_payment(t_id, t_uid, warmup_network)
+                    if upi:
+                        msg = f"[WAVE {wave_num} WARMUP] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
+                        notif_queue.put({"msg": msg})
+                    break
+                time.sleep(3)
+        
+        global_trigger.wait() 
+        for seat in roster:
+            task_queue.put(seat)
+            
+        wave_barrier.wait()
+
 def gha_sigterm_handler(signum, frame):
     logger.warning("\n⚠️ SIGTERM received (GitHub Actions cancellation). Forcing early shutdown...")
-    sys.exit(0) # Triggers the 'finally' block
+    sys.exit(0)
 
-state_dict = load_state()
+def main():
+    start_time = time.time()
+    signal.signal(signal.SIGTERM, gha_sigterm_handler)
+    
+    logger.info("==================================================")
+    logger.info("🚀 STARTING TARGETED SEAT SNIPER (MULTI-THREADED)")
+    logger.info("==================================================\n")
+
+    state_dict = load_state()
     notif_queue = queue.Queue()
     task_queue = queue.Queue()
     global_trigger = threading.Event()
     
-    # 7 is required: 6 static threads + 1 main orchestrator thread
-    wave_barrier = threading.Barrier(STATIC_THREADS + 1) 
+    notif_t = threading.Thread(target=notification_worker, args=(notif_queue, start_time))
+    notif_t.daemon = True
+    notif_t.start()
 
     # --- PHASE 1 / INITIALIZATION ---
     if not state_dict:
-        logger.info("    -> [PHASE 1] No state found. Building initial state...")
-        # ... (Keep your existing while-loop here to poll Venue API into target_sessions) ...
+        logger.info("    -> [PHASE 1] No state found. Scanning Venue API for target showtimes...")
+        target_sessions = []
         
+        while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+            target_sessions = find_target_session()
+            if not target_sessions:
+                logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 8 seconds...")
+                time.sleep(8)
+            else:
+                logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
+                break
+                
+        if not target_sessions:
+            logger.info("🏁 Max runtime reached before shows were listed. Shutting down.")
+            return
+
+        logger.info("    -> [PHASE 1] Polling Seat Layouts for initial discovery...")
         available_seats = {}
+        layout_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
+        
         for session in target_sessions:
-            str_data = fetch_seat_layout(session["sessionId"], {"state":0, "pool_proxy":None, "max_states":1})
-            c_seats, c_map, s_meta, _ = parse_layout(str_data)
+            s_id = session["sessionId"]
+            str_data = ""
             
-            # Logic to find desired seats and append to available_seats dict with full metadata
-            # (Matches exactly what your old Wave 1 did, just appending to available_seats instead of local roster)
+            while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+                str_data = fetch_seat_layout(s_id, layout_network_state)
+                if str_data: 
+                    break
+                time.sleep(2)
+                
+            current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
+            ticket_category = "0009" if "3D" in session.get("eventDimension", "").upper() else "0006"
             
+            for target_row, target_seat_list in DESIRED_SEATS.items():
+                if target_row not in current_seats: continue
+                
+                for target_seat in target_seat_list:
+                    if target_seat in current_seats[target_row]:
+                        seat_key = f"{s_id}_{target_row}_{target_seat}"
+                        meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                        if not meta: continue
+                        
+                        cat_info = categories_map.get(meta["block_code"])
+                        if not cat_info: continue
+                        
+                        available_seats[seat_key] = {
+                            "session_id": s_id,
+                            "row": target_row,
+                            "seat_num": target_seat,
+                            "meta": meta,
+                            "c_code": cat_info["cat_code"],
+                            "a_id": cat_info["area_id"],
+                            "ticket_category": ticket_category,
+                            "event_code": session["eventCode"]
+                        }
+        
         state_dict = {
             "completed_waves": 0,
             "last_wave_finish_timestamp": 0,
             "available_seats": available_seats
         }
         save_state_async(state_dict)
+        logger.info(f"    -> [STATE] Initial state built with {len(available_seats)} available desired seats.")
+        
     elif state_dict.get("completed_waves", 0) >= MAX_WAVES:
-        logger.info("🏁 Previous runners completed all 5 waves. Shutting down.")
+        logger.info("🏁 Previous runners completed all waves. Shutting down.")
         return
     else:
-        logger.info(f"    -> 🔄 Resuming from state! Skipped Venue & Layout API. Starting at Wave {state_dict['completed_waves'] + 1}")
+        logger.info(f"    -> 🔄 Resuming from state! Skipped API polling. Starting at Wave {state_dict['completed_waves'] + 1}")
 
+    # --- Group Seats by Session ---
+    seats_by_session = {}
+    for key, seat_data in state_dict.get("available_seats", {}).items():
+        s_id = seat_data["session_id"]
+        if s_id not in seats_by_session:
+            seats_by_session[s_id] = {}
+        seats_by_session[s_id][key] = seat_data
+        
+    num_static_threads = len(seats_by_session)
+    if num_static_threads == 0:
+        logger.info("    -> 🛑 No desired seats were available to snipe. Shutting down.")
+        return
+
+    wave_barrier = threading.Barrier(num_static_threads + 1)
+
+    logger.info("    -> 🛡️ Pre-warming WARP Proxy before spawning threads...")
     start_warp()
 
-    # --- PHASE 2: Spawn 6 Static Threads ---
-    # Group the state_dict["available_seats"] by session_id to pass to static threads
-    seats_by_session = {} # populate this from state_dict
-    
+    # --- PHASE 2: Spawn Static Producer Threads ---
+    logger.info(f"    -> 🚀 Spawning {num_static_threads} static producer threads...")
     for s_id, seats in seats_by_session.items():
-        t = threading.Thread(target=static_show_manager, args=(s_id, seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier))
+        t = threading.Thread(
+            target=static_show_manager, 
+            args=(s_id, seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier)
+        )
         t.daemon = True
         t.start()
 
     # --- PHASE 3: Wave Orchestration (Main Thread) ---
-    for wave in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
-        # 1. Wait for a static thread to get a 200 OK
-        global_trigger.wait()
-        
-        # 2. Trigger flipped! Spawn dynamic threads to consume the queue
-        logger.info(f"    -> 🌊 WAVE {wave} TRIGGERED! Spawning {MAX_DYNAMIC_THREADS} dynamic threads...")
-        for _ in range(MAX_DYNAMIC_THREADS):
-            dt = threading.Thread(target=dynamic_sniper_worker, args=(task_queue, notif_queue, wave))
-            dt.daemon = True
-            dt.start()
+    try:
+        for wave in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
+            logger.info(f"\n================= [ WAVE {wave} ] =================")
+            logger.info("    -> ⏳ Waiting for a static thread to trigger the main locking phase...")
             
-        # 3. Wait for all 60 tasks to be processed by dynamic threads
-        task_queue.join() 
-        logger.info(f"    -> ✅ WAVE {wave} TASKS COMPLETED.")
+            global_trigger.wait()
+            
+            logger.info(f"    -> 🌊 WAVE {wave} TRIGGERED! Spawning {MAX_DYNAMIC_THREADS} dynamic threads...")
+            for _ in range(MAX_DYNAMIC_THREADS):
+                dt = threading.Thread(target=dynamic_sniper_worker, args=(task_queue, notif_queue, wave))
+                dt.daemon = True
+                dt.start()
+                
+            task_queue.join() 
+            logger.info(f"    -> ✅ WAVE {wave} TASKS COMPLETED.")
+            
+            state_dict["completed_waves"] = wave
+            state_dict["last_wave_finish_timestamp"] = time.time()
+            save_state_async(state_dict)
+            
+            global_trigger.clear()
+            wave_barrier.wait()
+
+        logger.info("\n🏁 All 5 Waves completed successfully. Shutting down cleanly.")
         
-        # 4. Save State asynchronously
-        state_dict["completed_waves"] = wave
-        state_dict["last_wave_finish_timestamp"] = time.time()
-        save_state_async(state_dict)
-        
-        # 5. Reset global trigger for the next wave
-        global_trigger.clear()
-        
-        # 6. Hit the barrier to allow the 6 static threads to advance to the next wave's cooldown
-        wave_barrier.wait()
-        
+    finally:
+        if not notif_queue.empty():
+            logger.info("⏳ Waiting for remaining notifications to be sent...")
+            notif_queue.join()
+
 if __name__ == "__main__":
     main()
