@@ -338,10 +338,24 @@ def find_target_session():
 # =======================================================
 # PHASE 2 & 3: THREAD WORKER / LAYOUT PARSING
 # =======================================================
+TEMP_HEADERS = {
+    "Host": "services-in.bookmyshow.com",
+    "X-Latitude": "17.385044",
+    "X-Subregion-Code": "HYD",
+    "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011)",
+    "X-Longitude": "78.48667",
+    "X-Region-Code": "HYD",
+    "X-Platform-Code": "ANDROID",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+}
+
 def fetch_seat_layout(session_id, network_state):
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
-    resp = make_bms_request('POST', url, network_state=network_state, headers=generate_headers(is_post=True), data=payload)
+    #resp = make_bms_request('POST', url, network_state=network_state, headers=generate_headers(is_post=True), data=payload)
+    resp = make_bms_request('POST', url, network_state=network_state, headers=TEMP_HEADERS, data=payload)
     
     status_code = resp.status_code if resp else None
     if resp:
