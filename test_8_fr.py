@@ -36,6 +36,11 @@ TARGET_TIME_END = "11:59 PM"
 MAX_LOCK_ATTEMPTS = 5
 COOLDOWN_SECONDS = 240
 
+MAX_WAVES = 5
+MAX_DYNAMIC_THREADS = 24
+STATIC_THREADS = 6
+IDLE_TIMEOUT = 30
+MAX_SEAT_RETRIES = 7
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
@@ -164,15 +169,36 @@ def load_state():
     quiet_git_pull()
     if os.path.exists(STATE_FILE):
         try:
-            with open(STATE_FILE, "r") as f: 
+            with open(STATE_FILE, "r") as f:
                 data = json.load(f)
-                # Backward compatibility: Convert old list to new dictionary format
-                if isinstance(data, list):
-                    return {item: 1 for item in data}
-                return data if isinstance(data, dict) else {}
-        except json.JSONDecodeError: 
-            logger.warning("Failed to decode local state JSON. Returning empty dictionary.")
+                # Ensure it's the new format
+                if "available_seats" in data:
+                    return data
+        except json.JSONDecodeError:
+            logger.warning("Failed to decode local state JSON.")
     return {}
+
+def save_state_async(state_dict):
+    def _background_save():
+        logger.info("\n[GIT] Background state save initiated...")
+        for attempt in range(3):
+            quiet_git_pull()
+            with open(STATE_FILE, "w") as f:
+                json.dump(state_dict, f, indent=2)
+            
+            subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+            if STATE_FILE in status.stdout:
+                subprocess.run(["git", "commit", "-m", "Wave state update"], capture_output=True, check=False)
+                if quiet_git_push():
+                    logger.info("[STATE] ✅ State saved and pushed to remote.")
+                    return
+                time.sleep(2)
+            else:
+                return
+    
+    # Fire and forget thread
+    threading.Thread(target=_background_save, daemon=True).start()
 
 def save_state(sniped_dict):
     logger.info("\n[GIT] State mutated. Saving sniped seat state to Git...")
@@ -230,6 +256,38 @@ def start_warp():
     logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
     subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
     time.sleep(5)
+
+def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
+    # Isolated network state per dynamic thread
+    local_network = {"state": 0, "pool_proxy": None, "max_states": 3}
+    
+    while True:
+        try:
+            # Self-destruct if idle for 30 seconds
+            task = task_queue.get(timeout=IDLE_TIMEOUT)
+        except queue.Empty:
+            logger.debug("    -> 💀 Dynamic thread idle for 30s. Self-destructing.")
+            return
+
+        s_id, meta, c_code, a_id, t_cat, e_code = task["session_id"], task["meta"], task["c_code"], task["a_id"], task["ticket_category"], task["event_code"]
+        
+        success = False
+        for attempt in range(MAX_SEAT_RETRIES):
+            t_id, t_uid = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
+            if t_id:
+                upi_intent = initiate_payment(t_id, t_uid, local_network)
+                if upi_intent:
+                    qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
+                    msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
+                    notif_queue.put({"msg": msg, "attach_url": qr_url})
+                    success = True
+                    break
+            time.sleep(1) # Delay between retries
+            
+        if not success:
+            logger.warning(f"    -> ❌ Seat {task['row']}{task['seat_num']} exhausted {MAX_SEAT_RETRIES} retries. Declared dead for Wave {wave_num}.")
+
+        task_queue.task_done()
 
 def make_bms_request(method, url, network_state, max_retries=5, **kwargs):
     for attempt in range(1, max_retries + 1):
@@ -563,6 +621,45 @@ def monitor_and_snipe_worker(session, sniped_memory, state_lock, start_time, mut
 
     logger.info(f"    -> 🏁 Session {s_id} finished all 5 Waves. Terminating thread.")
 
+def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier):
+    # This thread stays alive for all remaining waves
+    for wave_num in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
+        
+        # 1. Cooldown Check
+        time_passed = time.time() - state_dict["last_wave_finish_timestamp"]
+        if state_dict["last_wave_finish_timestamp"] > 0 and time_passed < 870:
+            sleep_time = 870 - time_passed
+            logger.info(f"    -> 💤 Static Thread {session_id} waiting {int(sleep_time)}s for Wave {wave_num} cooldown...")
+            time.sleep(sleep_time)
+
+        # 2. Warmup Phase
+        logger.info(f"    -> 🔥 Static Thread {session_id} entering Warmup for Wave {wave_num}...")
+        warmup_network = {"state": 0, "pool_proxy": None, "max_states": 2}
+        roster = list(my_seats.values())
+        
+        if roster:
+            while not global_trigger.is_set():
+                test_seat = random.choice(roster)
+                t_id, t_uid = lock_seat(session_id, test_seat["meta"]["row_index"], test_seat["meta"]["backend_seat"], test_seat["c_code"], test_seat["a_id"], test_seat["ticket_category"], test_seat["event_code"], warmup_network)
+                if t_id:
+                    # SUCCESS! Fire the global trigger!
+                    global_trigger.set()
+                    upi = initiate_payment(t_id, t_uid, warmup_network)
+                    if upi:
+                        msg = f"[WAVE {wave_num} WARMUP] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
+                        notif_queue.put({"msg": msg})
+                    break
+                time.sleep(3)
+        
+        # 3. Main Locking Triggered - Dump seats to queue
+        # Wait until someone triggers the event (if this thread didn't)
+        global_trigger.wait() 
+        for seat in roster:
+            task_queue.put(seat)
+            
+        # 4. Wait for all 6 static threads AND the main thread to reach this barrier before continuing to next wave
+        wave_barrier.wait()
+
 # =======================================================
 # PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
 # =======================================================
@@ -693,91 +790,76 @@ def gha_sigterm_handler(signum, frame):
     logger.warning("\n⚠️ SIGTERM received (GitHub Actions cancellation). Forcing early shutdown...")
     sys.exit(0) # Triggers the 'finally' block
 
-def main():
-    start_time = time.time()
-    signal.signal(signal.SIGTERM, gha_sigterm_handler)
+state_dict = load_state()
+    notif_queue = queue.Queue()
+    task_queue = queue.Queue()
+    global_trigger = threading.Event()
     
-    logger.info("==================================================")
-    logger.info("🚀 STARTING TARGETED SEAT SNIPER (MULTI-THREADED)")
-    logger.info("==================================================\n")
+    # 7 is required: 6 static threads + 1 main orchestrator thread
+    wave_barrier = threading.Barrier(STATIC_THREADS + 1) 
 
-    logger.info("[GIT] Loading initial state from GitHub repository...")
-    sniped_seats_memory = load_state()
-    state_lock = threading.Lock()
-    mutated_flag = [False] # Shared dirty flag passed to all threads
-    notif_queue = queue.Queue() # NEW: Shared queue for notifications
-    
-    # NEW: Shared global wave trigger (starts at Wave 1)
-    shared_wave_state = {"current_wave": 1} 
-    
-    logger.info(f"[STATE] Loaded existing state for {len(sniped_seats_memory)} previously sniped seats.\n")
-
-    # --- PHASE 1: Wait for Showtimes to list ---
-    target_sessions = []
-    logger.info("    -> [PHASE 1] Scanning Venue API for target showtimes...")
-    
-    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        target_sessions = find_target_session()
+    # --- PHASE 1 / INITIALIZATION ---
+    if not state_dict:
+        logger.info("    -> [PHASE 1] No state found. Building initial state...")
+        # ... (Keep your existing while-loop here to poll Venue API into target_sessions) ...
         
-        if not target_sessions:
-            logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 8 seconds...")
-            time.sleep(8)
-        else:
-            logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
-            break
-
-    if not target_sessions:
-        logger.info("🏁 Max runtime reached before shows were listed. Shutting down.")
+        available_seats = {}
+        for session in target_sessions:
+            str_data = fetch_seat_layout(session["sessionId"], {"state":0, "pool_proxy":None, "max_states":1})
+            c_seats, c_map, s_meta, _ = parse_layout(str_data)
+            
+            # Logic to find desired seats and append to available_seats dict with full metadata
+            # (Matches exactly what your old Wave 1 did, just appending to available_seats instead of local roster)
+            
+        state_dict = {
+            "completed_waves": 0,
+            "last_wave_finish_timestamp": 0,
+            "available_seats": available_seats
+        }
+        save_state_async(state_dict)
+    elif state_dict.get("completed_waves", 0) >= MAX_WAVES:
+        logger.info("🏁 Previous runners completed all 5 waves. Shutting down.")
         return
+    else:
+        logger.info(f"    -> 🔄 Resuming from state! Skipped Venue & Layout API. Starting at Wave {state_dict['completed_waves'] + 1}")
 
-    # --- PROXY WARMUP: Activate WARP exactly before threading ---
-    logger.info("    -> 🛡️ Pre-warming WARP Proxy before spawning threads...")
     start_warp()
-        
-    # --- PHASE 2 & 3: Parallel Threading ---
-    logger.info(f"    -> 🚀 Spawning {len(target_sessions)} sniper threads + 1 state saver thread...")
-    threads = []
+
+    # --- PHASE 2: Spawn 6 Static Threads ---
+    # Group the state_dict["available_seats"] by session_id to pass to static threads
+    seats_by_session = {} # populate this from state_dict
     
-    # 1. Spawn the dedicated State Saver thread
-    saver_t = threading.Thread(
-        target=state_saver_worker,
-        args=(sniped_seats_memory, state_lock, mutated_flag, start_time)
-    )
-    saver_t.daemon = True
-    saver_t.start()
-    threads.append(saver_t)
-
-    # 1.5 NEW: Spawn the Notification Sender thread
-    notif_t = threading.Thread(
-        target=notification_worker,
-        args=(notif_queue, start_time)
-    )
-    notif_t.daemon = True
-    notif_t.start()
-    threads.append(notif_t)
-
-    # 2. Spawn the Sniper threads
-    for session in target_sessions:
-        t = threading.Thread(
-            target=monitor_and_snipe_worker, 
-            args=(session, sniped_seats_memory, state_lock, start_time, mutated_flag, notif_queue, shared_wave_state)
-        )
+    for s_id, seats in seats_by_session.items():
+        t = threading.Thread(target=static_show_manager, args=(s_id, seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier))
         t.daemon = True
         t.start()
-        threads.append(t)
 
-    # Block main thread, waiting for all threads to finish their assigned tasks
-    try:
-        for t in threads:
-            while t.is_alive():
-                t.join(1) # Check thread status every 1 second
-    finally:
-        if not notif_queue.empty():
-            logger.info("\n⏳ Waiting for remaining notifications to be sent...")
-            notif_queue.join()
+    # --- PHASE 3: Wave Orchestration (Main Thread) ---
+    for wave in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
+        # 1. Wait for a static thread to get a 200 OK
+        global_trigger.wait()
+        
+        # 2. Trigger flipped! Spawn dynamic threads to consume the queue
+        logger.info(f"    -> 🌊 WAVE {wave} TRIGGERED! Spawning {MAX_DYNAMIC_THREADS} dynamic threads...")
+        for _ in range(MAX_DYNAMIC_THREADS):
+            dt = threading.Thread(target=dynamic_sniper_worker, args=(task_queue, notif_queue, wave))
+            dt.daemon = True
+            dt.start()
             
-        # --- PHASE 4: Deferred Cleanup & Git Commit ---
-        logger.info("\n🏁 Executing final deferred state commit to Git...")
+        # 3. Wait for all 60 tasks to be processed by dynamic threads
+        task_queue.join() 
+        logger.info(f"    -> ✅ WAVE {wave} TASKS COMPLETED.")
+        
+        # 4. Save State asynchronously
+        state_dict["completed_waves"] = wave
+        state_dict["last_wave_finish_timestamp"] = time.time()
+        save_state_async(state_dict)
+        
+        # 5. Reset global trigger for the next wave
+        global_trigger.clear()
+        
+        # 6. Hit the barrier to allow the 6 static threads to advance to the next wave's cooldown
+        wave_barrier.wait()
         
 if __name__ == "__main__":
     main()
