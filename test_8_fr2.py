@@ -47,6 +47,9 @@ EMAIL = os.environ.get("BMS_EMAIL")
 PHONE = os.environ.get("BMS_PHONE")
 TOPIC = os.environ.get("NTFY_TOPIC")
 
+SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkcXhhZnlxcWtoeHVpcHpjamNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyOTYzNzIsImV4cCI6MjEwMjg3MjM3Mn0.dAerrc1sTh8CSnY6vZ4NtuvPXWNwjsHCl9gWZ436MLk"
+
 DESIRED_SEATS = {
     "N": ["47", "46", "45"],
     "M": ["47", "46", "45", "23", "24"],
@@ -191,6 +194,42 @@ def save_state_async(state_dict):
     # Fire and forget thread
     threading.Thread(target=_background_save, daemon=True).start()
 
+def grabroom_producer_loop():
+    logger.info("[GRABROOM] 📡 Supabase Delivery thread started.")
+    
+    endpoint = f"{SUPABASE_URL}/rest/v1/tickets"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation, resolution=merge-duplicates"
+    }
+
+    while True:
+        try:
+            payload = grabroom_queue.get()
+            if payload is None: break
+            
+            while True: # Guaranteed delivery retry loop
+                try:
+                    resp = requests.post(endpoint, json=payload, headers=headers, timeout=10)
+                    if resp.status_code in [200, 201]:
+                        logger.info(f"[GRABROOM] 🟢 Successfully saved ticket {payload['seat']} to Supabase!")
+                        break 
+                    elif resp.status_code == 409:
+                        logger.warning(f"[GRABROOM] ⚠️ Seat {payload['seat']} already exists in DB. Skipping.")
+                        break
+                    else:
+                        logger.warning(f"[GRABROOM] ⚠️ Supabase returned {resp.status_code}: {resp.text}. Retrying in 2s...")
+                except Exception as e:
+                    logger.error(f"[GRABROOM] ❌ Network error sending to Supabase: {e}. Retrying in 2s...")
+                
+                time.sleep(2)
+                
+            grabroom_queue.task_done()
+        except Exception as e:
+            logger.error(f"[GRABROOM] Thread error: {e}")
+
 def trigger_ntfy(message, attach_url=None):
     logger.info(f"🔔 ALERTING VIA NTFY:\n{message}")
     headers = {"Priority": "urgent"}
@@ -285,10 +324,11 @@ def find_target_session():
                 for event in show_detail.get("Event", []):
                     # Check both parent and child level for the matching Movie Code
                     parent_code = event.get("EventCode", "")
+                    event_title = event.get("EventTitle", "Unknown Title") # <-- NEW
                     for child in event.get("ChildEvents", []):
-                        # Extract the event code dynamically (prioritize child code, fallback to parent)
                         current_event_code = child.get("EventCode", parent_code)
                         current_event_dimension = child.get("EventDimension", "")
+                        event_language = child.get("EventLanguage", "Unknown Language") # <-- NEW
                         
                         for show in child.get("ShowTimes", []):
                             # --- NEW: Constraint Check 0: Strict Date Verification ---
@@ -316,6 +356,8 @@ def find_target_session():
                                 valid_shows.append({
                                     "sessionId": show.get("SessionId"),
                                     "eventCode": current_event_code,
+                                    "eventTitle": event_title,               # <-- NEW
+                                    "eventLanguage": event_language,         # <-- NEW
                                     "eventDimension": current_event_dimension,
                                     "dateCode": show.get("ShowDateCode"),
                                     "time": s_time_str,
@@ -349,13 +391,31 @@ def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
         
         success = False
         for attempt in range(MAX_SEAT_RETRIES):
-            t_id, t_uid = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
+            t_id, t_uid, b_id = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
             if t_id:
                 upi_intent = initiate_payment(t_id, t_uid, local_network)
                 if upi_intent:
                     qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
                     msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
                     notif_queue.put({"msg": msg, "attach_url": qr_url})
+                    
+                    # --- GRABROOM TELEMETRY ---
+                    ticket_payload = {
+                        "seat": f"{task['row']}{task['seat_num']}",
+                        "booking_id": b_id,
+                        "transaction_id": t_id,
+                        "event_title": task.get("event_title"),
+                        "event_language": task.get("event_language"),
+                        "event_dimension": task.get("event_dimension"),
+                        "show_date_code": task.get("date_code"),
+                        "show_time": task.get("time"),
+                        "screen_name": task.get("screen"),
+                        "attributes": task.get("attribute"),
+                        "qr_image_url": qr_url,
+                        "snipe_timestamp": int(time.time() * 1000)
+                    }
+                    grabroom_queue.put(ticket_payload)
+                    
                     success = True
                     break
             time.sleep(1) # Delay between retries
@@ -444,15 +504,35 @@ def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dic
         if roster and wave_num > 1: # FIX: Skip warmup entirely for Wave 1
             while not global_trigger.is_set():
                 test_seat = random.choice(roster)
-                t_id, t_uid = lock_seat(session_id, test_seat["meta"]["row_index"], test_seat["meta"]["backend_seat"], test_seat["c_code"], test_seat["a_id"], test_seat["ticket_category"], test_seat["event_code"], warmup_network)
+                t_id, t_uid, b_id = lock_seat(session_id, test_seat["meta"]["row_index"], test_seat["meta"]["backend_seat"], test_seat["c_code"], test_seat["a_id"], test_seat["ticket_category"], test_seat["event_code"], warmup_network)
                 
                 if t_id:
                     if not global_trigger.is_set(): # FIX: Prevent Trigger Bleed-Over Race Condition
                         global_trigger.set()
                         roster.remove(test_seat) # FIX: Self-Sabotage (Remove locked seat from roster)
                         
-                        msg = f"[WAVE {wave_num} WARMUP] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
-                        payment_queue.put({"t_id": t_id, "t_uid": t_uid, "network": warmup_network, "msg": msg})
+                        upi_intent = initiate_payment(t_id, t_uid, warmup_network)
+                        if upi_intent:
+                            qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
+                            msg = f"[WAVE {wave_num} WARMUP] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
+                            notif_queue.put({"msg": msg, "attach_url": qr_url})
+                            
+                            # --- GRABROOM TELEMETRY ---
+                            ticket_payload = {
+                                "seat": f"{test_seat['row']}{test_seat['seat_num']}",
+                                "booking_id": b_id,
+                                "transaction_id": t_id,
+                                "event_title": test_seat.get("event_title"),
+                                "event_language": test_seat.get("event_language"),
+                                "event_dimension": test_seat.get("event_dimension"),
+                                "show_date_code": test_seat.get("date_code"),
+                                "show_time": test_seat.get("time"),
+                                "screen_name": test_seat.get("screen"),
+                                "attributes": test_seat.get("attribute"),
+                                "qr_image_url": qr_url,
+                                "snipe_timestamp": int(time.time() * 1000)
+                            }
+                            grabroom_queue.put(ticket_payload)
                     break
                 time.sleep(3)
         
@@ -513,14 +593,15 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
             r_json = resp.json()
             t_id = r_json.get("transactionId")
             t_uid = r_json.get("transactionUID")
+            b_id = r_json.get("bookingId") # <-- Extract booking ID
             if t_id and t_uid:
                 logger.info(f"    -> 🟢 [SNIPER] SUCCESS! Seat locked! TransID: {t_id}")
-                return t_id, t_uid
+                return t_id, t_uid, b_id
         except Exception as e:
             logger.error(f"    -> ❌ [SNIPER] Error parsing Request 1: {e}")
     
     logger.error("    -> 🔴 [SNIPER] FAILED to lock seat.")
-    return None, None
+    return None, None, None
 
 def initiate_payment(trans_id, trans_uid, network_state):
     logger.info(f"    -> 💸 [SNIPER] Request 2: Initiating payment intent for {trans_id}...")
@@ -598,7 +679,8 @@ def gha_sigterm_handler(signum, frame):
 def main():
     start_time = time.time()
     signal.signal(signal.SIGTERM, gha_sigterm_handler)
-    
+    grabroom_thread = threading.Thread(target=grabroom_producer_loop, daemon=True)
+    grabroom_thread.start()
     logger.info("==================================================")
     logger.info("🚀 STARTING TARGETED SEAT SNIPER (MULTI-THREADED)")
     logger.info("==================================================\n")
@@ -669,7 +751,14 @@ def main():
                             "c_code": cat_info["cat_code"],
                             "a_id": cat_info["area_id"],
                             "ticket_category": ticket_category,
-                            "event_code": session["eventCode"]
+                            "event_code": session["eventCode"],
+                            "event_title": session.get("eventTitle"),
+                            "event_language": session.get("eventLanguage"),
+                            "event_dimension": session.get("eventDimension"),
+                            "date_code": session.get("dateCode"),
+                            "time": session.get("time"),
+                            "screen": session.get("screen"),
+                            "attribute": session.get("attribute")
                         }
         
         state_dict = {
@@ -754,6 +843,14 @@ def main():
         logger.info("\n🏁 All 5 Waves completed successfully. Shutting down cleanly.")
         
     finally:
+        logger.info("\n🏁 Flushing queues. Waiting for Grabroom delivery to complete...")
+        def _flush_queue():
+            grabroom_queue.join()
+        
+        flush_thread = threading.Thread(target=_flush_queue)
+        flush_thread.start()
+        flush_thread.join(timeout=10.0) 
+
         if not notif_queue.empty():
             logger.info("⏳ Waiting for remaining notifications to be sent...")
             notif_queue.join()
