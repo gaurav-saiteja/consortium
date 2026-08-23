@@ -1,6 +1,6 @@
 {
-  "completed_waves": 0,
-  "last_wave_finish_timestamp": 0,
+  "completed_waves": 1,
+  "last_wave_finish_timestamp": 1787454427.5269725,
   "available_seats": {
     "255046_N_45": {
       "session_id": "255046",
