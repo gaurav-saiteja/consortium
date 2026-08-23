@@ -520,30 +520,35 @@ def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dic
                 t_id, t_uid, b_id = lock_seat(session_id, test_seat["meta"]["row_index"], test_seat["meta"]["backend_seat"], test_seat["c_code"], test_seat["a_id"], test_seat["ticket_category"], test_seat["event_code"], warmup_network)
                 
                 if t_id:
-                    if not global_trigger.is_set(): # FIX: Prevent Trigger Bleed-Over Race Condition
+                    # 1. ALWAYS process the successfully locked seat, no matter what
+                    roster.remove(test_seat) 
+                    
+                    msg = f"[WAVE {wave_num}] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
+                    notif_queue.put({"msg": msg})
+                    
+                    # --- GRABROOM TELEMETRY ---
+                    ticket_payload = {
+                        "seat": f"{test_seat['row']}{test_seat['seat_num']}",
+                        "booking_id": b_id,
+                        "transaction_id": t_id,
+                        "trans_uid": t_uid,
+                        "venue_code": VENUE_CODE,
+                        "event_title": test_seat.get("event_title"),
+                        "event_language": test_seat.get("event_language"),
+                        "event_dimension": test_seat.get("event_dimension"),
+                        "show_date_code": test_seat.get("date_code"),
+                        "show_time": test_seat.get("time"),
+                        "screen_name": test_seat.get("screen"),
+                        "attributes": test_seat.get("attribute"),
+                        "snipe_timestamp": int(time.time() * 1000)
+                    }
+                    grabroom_queue.put(ticket_payload)
+
+                    # 2. THEN check if this thread needs to be the one to flip the trigger
+                    if not global_trigger.is_set():
                         global_trigger.set()
-                        roster.remove(test_seat) # FIX: Self-Sabotage (Remove locked seat from roster)
                         
-                        msg = f"[WAVE {wave_num}] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
-                        notif_queue.put({"msg": msg})
-                        
-                        # --- GRABROOM TELEMETRY ---
-                        ticket_payload = {
-                            "seat": f"{test_seat['row']}{test_seat['seat_num']}",
-                            "booking_id": b_id,
-                            "transaction_id": t_id,
-                            "trans_uid": t_uid,
-                            "venue_code": VENUE_CODE,
-                            "event_title": test_seat.get("event_title"),
-                            "event_language": test_seat.get("event_language"),
-                            "event_dimension": test_seat.get("event_dimension"),
-                            "show_date_code": test_seat.get("date_code"),
-                            "show_time": test_seat.get("time"),
-                            "screen_name": test_seat.get("screen"),
-                            "attributes": test_seat.get("attribute"),
-                            "snipe_timestamp": int(time.time() * 1000)
-                        }
-                        grabroom_queue.put(ticket_payload)
+                    # 3. Break out of the warmup loop
                     break
                 time.sleep(3)
         
