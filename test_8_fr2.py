@@ -408,7 +408,7 @@ def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
         for attempt in range(MAX_SEAT_RETRIES):
             t_id, t_uid, b_id = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
             if t_id:
-                time.sleep(random.uniform(6, 10))
+                time.sleep(random.uniform(1.9, 5.1))
                 upi_intent = initiate_payment(t_id, t_uid, local_network)
                 if upi_intent:
                     qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
