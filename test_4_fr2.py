@@ -39,7 +39,6 @@ fatal_waf_block = False
 
 task_queue = queue.Queue()
 grabroom_queue = queue.Queue()
-GRABROOM_WEBHOOK_URL = os.environ.get("GRABROOM_WEBHOOK_URL", "https://your-cloudflare-worker.workers.dev/api/ticket")
 in_flight_seats = set()
 state_lock = threading.Lock()
 thread_mgmt_lock = threading.Lock()
@@ -624,71 +623,6 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
     logger.error("    -> 🔴 [SNIPER] FAILED to lock seat.")
     return None, None, None # <-- MODIFIED
 
-def initiate_payment(trans_id, trans_uid, network_state):
-    logger.info(f"    -> 💸 [SNIPER] Request 2: Initiating payment intent for {trans_id}...")
-    url = "https://services-in.bookmyshow.com/doTrans.aspx"
-    
-    rand_hex = "".join(random.choices("0123456789abcdef", k=7))
-    boundary = f"----geckoformboundary4549d0c459b45033a86405c7a{rand_hex}"
-
-    headers = {
-        "Host": "services-in.bookmyshow.com",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Content-Type": f"multipart/form-data; boundary={boundary}",
-        "Referer": "https://in.bookmyshow.com/",
-        "X-Region-Code": "HYD",
-        "X-Region-Slug": "hyderabad",
-        "X-Latitude": "17.385044",
-        "X-Longitude": "78.486671",
-        "X-Deemed-Email": EMAIL,
-        "X-Deemed-Mobile": PHONE,
-        "X-Phone": PHONE,
-        "X-Mobile": PHONE,
-        "X-Email": EMAIL,
-        "X-Transaction-Uid": trans_uid,
-        "X-App-Code": "WEB",
-        "X-Platform-Code": "WEB",
-        "X-Platform": "WEB",
-        "Origin": "https://in.bookmyshow.com",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-site"
-    }
-
-    form_fields = [
-        f"--{boundary}", 'Content-Disposition: form-data; name="strAppCode"', '', 'WEB',
-        f"--{boundary}", 'Content-Disposition: form-data; name="lngTransactionIdentifier"', '', trans_id,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strCommand"', '', 'SETPAYMENT',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strVenueCode"', '', VENUE_CODE,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam1"', '', "'|TYPE=UPI|UPITYPE=QRCODE|IMAGEURL=''|PROCESSTYPE=REQUEST|LSID=|MEMBERID=|CLIENTID=movies|",
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam2"', '', '|ETICKET=Y|MTICKET=Y|',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam3"', '', EMAIL,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam4"', '', PHONE,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strFormat"', '', 'json',
-        f"--{boundary}--", ''
-    ]
-    
-    payload_str = '\r\n'.join(form_fields)
-    resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=payload_str.encode('utf-8'))
-    logger.info(f"{resp.status_code}")
-    if resp and resp.status_code == 200:
-        try:
-            data = resp.json()
-            bms = data.get("BookMyShow", {})
-            if bms.get("blnSuccess") == "true":
-                str_data = bms.get("strData", [])
-                if len(str_data) > 0:
-                    upi_url = str_data[0].get("BMSUPIQRPAYURL")
-                    logger.info(f"    -> 🟢 [SNIPER] SUCCESS! Payment Intent Generated!")
-                    return upi_url
-        except Exception as e:
-            logger.error(f"    -> ❌ [SNIPER] Error parsing Request 2: {e}")
-            
-    logger.error("    -> 🔴 [SNIPER] FAILED to generate payment intent.")
-    return None
 
 def execute_snipe(session, row, seat_num, meta, categories, network_state):
     cat_info = categories.get(meta["block_code"])
@@ -703,25 +637,23 @@ def execute_snipe(session, row, seat_num, meta, categories, network_state):
     
     logger.info(f"    -> 🎯 [SNIPER] MATCH FOUND! Auto-locking Row {row}, Seat {seat_num} (Internal Cat: {c_code}, Area: {a_id})")
     
-    # 1. Lock (Note the added b_id unpack)
+    # 1. Lock the seat
     t_id, t_uid, b_id = lock_seat(session["sessionId"], meta["row_index"], meta["backend_seat"], c_code, a_id, ticket_category, session["eventCode"], network_state)
     if not t_id: return False
     
-    # 2. Pay
-    upi_intent = initiate_payment(t_id, t_uid, network_state)
-    if not upi_intent: return False
-    
-    # 3. Format Notification & Trigger Push
-    qr_image_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
+    # 2. Format Notification & Trigger Push (Plain text, no QR image)
     hum_date = humanize_date(session["dateCode"])
-    msg = f"{row}{seat_num} is locked. {hum_date} {session['time']} {session['attribute']} {VENUE_CODE} {session['eventCode']}"
+    msg = f"Row {row} Seat {seat_num} is locked.\n\n{VENUE_CODE} {session['eventCode']}\n{hum_date} {session['time']} {session['attribute']}"
     
-    threading.Thread(target=trigger_ntfy, args=(msg, qr_image_url), daemon=True).start()
-    # --- NEW: GRABROOM PRODUCER LOGIC ---
+    threading.Thread(target=trigger_ntfy, args=(msg, None), daemon=True).start()
+    
+    # 3. GRABROOM TELEMETRY (Synced perfectly with test_8)
     ticket_payload = {
         "seat": f"{row}{seat_num}",
-        "booking_id": b_id,                   # Changed key
-        "transaction_id": t_id,               # Changed key
+        "booking_id": b_id,
+        "transaction_id": t_id,
+        "trans_uid": t_uid,
+        "venue_code": VENUE_CODE,
         "event_title": session.get("eventTitle"),
         "event_language": session.get("eventLanguage"),
         "event_dimension": session.get("eventDimension"),
@@ -729,11 +661,10 @@ def execute_snipe(session, row, seat_num, meta, categories, network_state):
         "show_time": session.get("time"),
         "screen_name": session.get("screen"),
         "attributes": session.get("attribute"),
-        "qr_image_url": qr_image_url,         # Changed key
         "snipe_timestamp": int(time.time() * 1000)
     }
     grabroom_queue.put(ticket_payload)
-    # ------------------------------------
+    
     return True
 
 def grabroom_producer_loop():
