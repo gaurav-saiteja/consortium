@@ -20,15 +20,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260824"]
+DATES = ["20260825"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_125.json"
+STATE_FILE = "sniped_state_115.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX SCREEN"
-TARGET_SHOW_INDEX = 2
+TARGET_SHOW_INDEX = 1
 
 # --- GITHUB RUNNER CONFIGURATION ---
 GITHUB_TOKEN = os.environ.get("TOKEN_GITHUB")
@@ -55,7 +55,7 @@ TOPIC = os.environ.get("NTFY_TOPIC")
 
 DESIRED_SEATS = {
     "N": ["47", "46", "45"],
-    "M": ["47", "46", "45", "23", "24"],
+    "M": ["47", "46", "45"],
     "L": ["47", "46", "45"],
     "K": ["47", "46", "45"],
     "J": ["47", "46", "45"],
