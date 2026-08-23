@@ -810,7 +810,7 @@ def main():
 
     # Block main thread, waiting until the poller finishes (either via Timeout or SIGTERM)
     try:
-       while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
             if poller_thread.is_alive():
                 poller_thread.join(1) # Block the main thread, check thread status every 1 second
             else:
