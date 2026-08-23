@@ -21,9 +21,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260824"]
+DATES = ["20260825"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_115.json"
+STATE_FILE = "sniped_state_125.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
