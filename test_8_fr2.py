@@ -21,9 +21,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260825"]
+DATES = ["20260824"]
 VENUE_CODE = "PRHN"
-STATE_FILE = "sniped_state_105.json"
+STATE_FILE = "sniped_state_115.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 TICKET_CATEGORY_3D = "0009"
 TICKET_CATEGORY_2D = "0005"
@@ -53,14 +53,9 @@ grabroom_queue = queue.Queue()
 
 DESIRED_SEATS = {
     "N": ["47", "46", "45"],
-    "M": ["47", "46", "45", "23", "24"],
+    "M": ["47", "46", "45"],
     "L": ["47", "46", "45"],
-    "K": ["47", "46", "45"],
-    "J": ["47", "46", "45"],
-    "I": ["47", "46", "45"],
-    "G": ["47", "46", "45"],
-    "H": ["47", "46", "45"],
-    "F": ["47", "46", "45"]
+    "K": ["47", "46", "45"]
 }
 
 PROXY_POOL = []
@@ -395,7 +390,7 @@ def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
         for attempt in range(MAX_SEAT_RETRIES):
             t_id, t_uid, b_id = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
             if t_id:
-                time.sleep(3)
+                time.sleep(10)
                 upi_intent = initiate_payment(t_id, t_uid, local_network)
                 if upi_intent:
                     qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
