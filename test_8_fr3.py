@@ -408,32 +408,29 @@ def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
         for attempt in range(MAX_SEAT_RETRIES):
             t_id, t_uid, b_id = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
             if t_id:
-                time.sleep(random.uniform(1.9, 5.1))
-                upi_intent = initiate_payment(t_id, t_uid, local_network)
-                if upi_intent:
-                    qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-                    msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
-                    notif_queue.put({"msg": msg, "attach_url": qr_url})
-                    
-                    # --- GRABROOM TELEMETRY ---
-                    ticket_payload = {
-                        "seat": f"{task['row']}{task['seat_num']}",
-                        "booking_id": b_id,
-                        "transaction_id": t_id,
-                        "event_title": task.get("event_title"),
-                        "event_language": task.get("event_language"),
-                        "event_dimension": task.get("event_dimension"),
-                        "show_date_code": task.get("date_code"),
-                        "show_time": task.get("time"),
-                        "screen_name": task.get("screen"),
-                        "attributes": task.get("attribute"),
-                        "qr_image_url": qr_url,
-                        "snipe_timestamp": int(time.time() * 1000)
-                    }
-                    grabroom_queue.put(ticket_payload)
-                    
-                    success = True
-                    break
+                msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
+                notif_queue.put({"msg": msg})
+                
+                # --- GRABROOM TELEMETRY ---
+                ticket_payload = {
+                    "seat": f"{task['row']}{task['seat_num']}",
+                    "booking_id": b_id,
+                    "transaction_id": t_id,
+                    "trans_uid": t_uid,
+                    "venue_code": VENUE_CODE,
+                    "event_title": task.get("event_title"),
+                    "event_language": task.get("event_language"),
+                    "event_dimension": task.get("event_dimension"),
+                    "show_date_code": task.get("date_code"),
+                    "show_time": task.get("time"),
+                    "screen_name": task.get("screen"),
+                    "attributes": task.get("attribute"),
+                    "snipe_timestamp": int(time.time() * 1000)
+                }
+                grabroom_queue.put(ticket_payload)
+                
+                success = True
+                break
             time.sleep(1) # Delay between retries
             
         if not success:
@@ -527,28 +524,26 @@ def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dic
                         global_trigger.set()
                         roster.remove(test_seat) # FIX: Self-Sabotage (Remove locked seat from roster)
                         
-                        upi_intent = initiate_payment(t_id, t_uid, warmup_network)
-                        if upi_intent:
-                            qr_url = f"https://in.bookmyshow.com/secure/barcode/?IsImage=Y&strBarcodeType=qrcode&strBarcodeTxt={upi_intent}&intHeight=300&intWidth=300"
-                            msg = f"[WAVE {wave_num} WARMUP] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
-                            notif_queue.put({"msg": msg, "attach_url": qr_url})
-                            
-                            # --- GRABROOM TELEMETRY ---
-                            ticket_payload = {
-                                "seat": f"{test_seat['row']}{test_seat['seat_num']}",
-                                "booking_id": b_id,
-                                "transaction_id": t_id,
-                                "event_title": test_seat.get("event_title"),
-                                "event_language": test_seat.get("event_language"),
-                                "event_dimension": test_seat.get("event_dimension"),
-                                "show_date_code": test_seat.get("date_code"),
-                                "show_time": test_seat.get("time"),
-                                "screen_name": test_seat.get("screen"),
-                                "attributes": test_seat.get("attribute"),
-                                "qr_image_url": qr_url,
-                                "snipe_timestamp": int(time.time() * 1000)
-                            }
-                            grabroom_queue.put(ticket_payload)
+                        msg = f"[WAVE {wave_num}] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
+                        notif_queue.put({"msg": msg})
+                        
+                        # --- GRABROOM TELEMETRY ---
+                        ticket_payload = {
+                            "seat": f"{test_seat['row']}{test_seat['seat_num']}",
+                            "booking_id": b_id,
+                            "transaction_id": t_id,
+                            "trans_uid": t_uid,
+                            "venue_code": VENUE_CODE,
+                            "event_title": test_seat.get("event_title"),
+                            "event_language": test_seat.get("event_language"),
+                            "event_dimension": test_seat.get("event_dimension"),
+                            "show_date_code": test_seat.get("date_code"),
+                            "show_time": test_seat.get("time"),
+                            "screen_name": test_seat.get("screen"),
+                            "attributes": test_seat.get("attribute"),
+                            "snipe_timestamp": int(time.time() * 1000)
+                        }
+                        grabroom_queue.put(ticket_payload)
                     break
                 time.sleep(3)
         
@@ -622,72 +617,6 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
     
     logger.error("    -> 🔴 [SNIPER] FAILED to lock seat.")
     return None, None, None
-
-def initiate_payment(trans_id, trans_uid, network_state):
-    logger.info(f"    -> 💸 [SNIPER] Request 2: Initiating payment intent for {trans_id}...")
-    url = "https://services-in.bookmyshow.com/doTrans.aspx"
-    
-    rand_hex = "".join(random.choices("0123456789abcdef", k=7))
-    boundary = f"----geckoformboundary4549d0c459b45033a86405c7a{rand_hex}"
-    dynamic_ua = random.choice(user_agents)
-    headers = {
-        "Host": "services-in.bookmyshow.com",
-        "User-Agent": dynamic_ua,
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Content-Type": f"multipart/form-data; boundary={boundary}",
-        "Referer": "https://in.bookmyshow.com/",
-        "X-Region-Code": "HYD",
-        "X-Region-Slug": "hyderabad",
-        "X-Latitude": "17.385044",
-        "X-Longitude": "78.486671",
-        "X-Deemed-Email": EMAIL,
-        "X-Deemed-Mobile": PHONE,
-        "X-Phone": PHONE,
-        "X-Mobile": PHONE,
-        "X-Email": EMAIL,
-        "X-Transaction-Uid": trans_uid,
-        "X-App-Code": "WEB",
-        "X-Platform-Code": "WEB",
-        "X-Platform": "WEB",
-        "Origin": "https://in.bookmyshow.com",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-site"
-    }
-
-    form_fields = [
-        f"--{boundary}", 'Content-Disposition: form-data; name="strAppCode"', '', 'WEB',
-        f"--{boundary}", 'Content-Disposition: form-data; name="lngTransactionIdentifier"', '', trans_id,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strCommand"', '', 'SETPAYMENT',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strVenueCode"', '', VENUE_CODE,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam1"', '', "'|TYPE=UPI|UPITYPE=QRCODE|IMAGEURL=''|PROCESSTYPE=REQUEST|LSID=|MEMBERID=|CLIENTID=movies|",
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam2"', '', '|ETICKET=Y|MTICKET=Y|',
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam3"', '', EMAIL,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strParam4"', '', PHONE,
-        f"--{boundary}", 'Content-Disposition: form-data; name="strFormat"', '', 'json',
-        f"--{boundary}--", ''
-    ]
-    
-    payload_str = '\r\n'.join(form_fields)
-    resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=payload_str.encode('utf-8'))
-    logger.info(f"{resp.status_code}")
-    if resp and resp.status_code == 200:
-        try:
-            data = resp.json()
-            bms = data.get("BookMyShow", {})
-            if bms.get("blnSuccess") == "true":
-                str_data = bms.get("strData", [])
-                if len(str_data) > 0:
-                    upi_url = str_data[0].get("BMSUPIQRPAYURL")
-                    logger.info(f"    -> 🟢 [SNIPER] SUCCESS! Payment Intent Generated!")
-                    return upi_url
-        except Exception as e:
-            logger.error(f"    -> ❌ [SNIPER] Error parsing Request 2: {e}")
-            
-    logger.error("    -> 🔴 [SNIPER] FAILED to generate payment intent.")
-    return None
 
 # =======================================================
 # MAIN LOOP STATE MACHINE
