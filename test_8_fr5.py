@@ -504,8 +504,8 @@ def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dic
         
         # 1. Cooldown Check
         time_passed = time.time() - state_dict["last_wave_finish_timestamp"]
-        if state_dict["last_wave_finish_timestamp"] > 0 and time_passed < 270:
-            sleep_time = 270 - time_passed
+        if state_dict["last_wave_finish_timestamp"] > 0 and time_passed < 275:
+            sleep_time = 275 - time_passed
             logger.info(f"    -> 💤 Static Thread {session_id} waiting {int(sleep_time)}s for Wave {wave_num} cooldown...")
             time.sleep(sleep_time)
 
