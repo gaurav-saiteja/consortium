@@ -1,0 +1,833 @@
+import requests
+from curl_cffi import requests as cffi_requests
+import time
+import json
+import os
+import queue
+import re
+import subprocess
+import random
+import threading
+import sys
+import signal
+import logging
+from datetime import datetime
+
+# --- LOGGING CONFIGURATION ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s"
+)
+logger = logging.getLogger(__name__)
+
+# --- CONFIGURATION ---
+DATES = ["20260825"]
+VENUE_CODE = "ALLU"
+STATE_FILE = "sniped_state_12.json"
+MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
+# --- NEW: SHOWTIME CONSTRAINTS ---
+TARGET_ATTRIBUTE = "DOLBY CINEMA"
+TARGET_TIME_START = "07:00 AM"
+TARGET_TIME_END = "03:00 PM"
+
+MAX_WAVES = 5
+MAX_DYNAMIC_THREADS = 20
+STATIC_THREADS = 6
+IDLE_TIMEOUT = 30
+MAX_SEAT_RETRIES = 20
+
+# --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
+EMAIL = os.environ.get("BMS_EMAIL") 
+PHONE = os.environ.get("BMS_PHONE")
+TOPIC = os.environ.get("NTFY_TOPIC")
+
+SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkcXhhZnlxcWtoeHVpcHpjamNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyOTYzNzIsImV4cCI6MjEwMjg3MjM3Mn0.dAerrc1sTh8CSnY6vZ4NtuvPXWNwjsHCl9gWZ436MLk"
+grabroom_queue = queue.Queue()
+
+ROW_CATEGORY_MAP_3D = {
+    "A": "0005",
+    "B": "0006", "C": "0006", "D": "0006", "E": "0006", "F": "0006", "G": "0006", "H": "0006", "I": "0006",
+    "J": "0007",
+    "K": "0008", "L": "0008", "M": "0008", "N": "0008", "O": "0008", "P": "0008", "Q": "0008", "R": "0008", "S": "0008"
+}
+
+ROW_CATEGORY_MAP_2D = {
+    "A": "0001",
+    "B": "0002", "C": "0002", "D": "0002", "E": "0002", "F": "0002", "G": "0002", "H": "0002", "I": "0002",
+    "J": "0003",
+    "K": "0004", "L": "0004", "M": "0004", "N": "0004", "O": "0004", "P": "0004", "Q": "0004", "R": "0004", "S": "0004"
+}
+
+DESIRED_SEATS = {
+    "N": ["1", "2", "3"],
+    "M": ["1", "2", "3"],
+    "L": ["1", "2", "3"],
+    "K": ["1", "2", "3"],
+    "J": ["1", "2", "3"],
+    "I": ["1", "2", "3"],
+    "H": ["1", "2", "3"],
+    "G": ["1", "2", "3"],
+    "F": ["1", "2", "3"],
+    "E": ["1", "2", "3"],
+}
+
+PROXY_POOL = []
+raw_proxies = os.environ.get("PROXY_LIST", "")
+if raw_proxies:
+    for line in raw_proxies.strip().split("\n"):
+        parts = line.strip().split(":")
+        if len(parts) == 4:
+            ip, port, user, pwd = parts
+            # curl_cffi requires the http://username:password@ip:port format
+            PROXY_POOL.append(f"http://{user}:{pwd}@{ip}:{port}")
+
+PROXIES = {
+    "http": "socks5://127.0.0.1:40000",
+    "https": "socks5://127.0.0.1:40000"
+}
+
+user_agents = [
+    "Mozilla/5.0 (Linux; U; Android 16;zh-cn; TB375FC Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.7389.0 MobileLenovoBrowser/9.2.7 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 8.1.0; vivo Y83) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Infinix X6532 Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; Lenovo YT-J706X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 15; SM-S908B Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; U; Android 13; zh-cn; M2012K11AC Build/TKQ1.221114.001) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.7049.79 Mobile Safari/537.36 XiaoMi/MiuiBrowser/20.25.1020805",
+    "Mozilla/5.0 (Linux; Android 16; 23129RN51X Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; 2210132C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; V2247) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; A001SH) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Samsung Galaxy S24 Ultra
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36", # Google Pixel 8 Pro
+    "Mozilla/5.0 (Linux; Android 14; CPH2581) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36", # OnePlus 12
+    "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.110 Mobile Safari/537.36", # Samsung Galaxy A54 5G
+    "Mozilla/5.0 (Linux; Android 13; 22101316G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.119 Mobile Safari/537.36", # Xiaomi Redmi Note 12 Pro
+    "Mozilla/5.0 (Linux; Android 14; A065) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Nothing Phone (2)
+    "Mozilla/5.0 (Linux; Android 13; CPH2525) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.178 Mobile Safari/537.36", # Oppo Reno 10 Pro
+    "Mozilla/5.0 (Linux; Android 13; RMX3561) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.100 Mobile Safari/537.36", # Realme GT Neo 3
+    "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Google Pixel 6a
+    "Mozilla/5.0 (Linux; Android 14; V2324A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.113 Mobile Safari/537.36", # Vivo X100 Pro
+    "Mozilla/5.0 (Linux; Android 14; SM-F946B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Samsung Galaxy Z Fold 5
+    "Mozilla/5.0 (Linux; Android 14; XQ-DQ72) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Mobile Safari/537.36", # Sony Xperia 1 V
+    "Mozilla/5.0 (Linux; Android 13; motorola edge 40 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36", # Motorola Edge 40 Neo
+    "Mozilla/5.0 (Linux; Android 14; 23049PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Poco F5
+    "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Safari/537.36" # Samsung Galaxy Tab S9 (Tablet)
+]
+
+def generate_headers(is_post=False):
+    bms_id = f"1.4{random.randint(1000000, 9999999)}.{random.randint(1000000000000, 9999999999999)}"
+    device_id = "".join(random.choices("0123456789abcdef", k=16))
+    ua = random.choice(user_agents)
+    app_version_code = f"1{random.randint(10000, 99999)}"
+    app_version = f"18.{random.randint(10, 99)}.{random.randint(10, 99)}"
+    
+    host = "services-in.bookmyshow.com" if is_post else "in.bookmyshow.com"
+    
+    return {
+        "Host": host,
+        "X-Bms-Id": bms_id,
+        "X-Device-Id": device_id,
+        "X-Latitude": "17.385044",
+        "X-Subregion-Code": "HYD",
+        "X-App-Code": "MOBAND2",
+        "User-Agent": ua,
+        "X-App-Version-Code": app_version_code,
+        "X-Longitude": "78.48667",
+        "X-Platform": "AND",
+        "X-Region-Code": "HYD",
+        "X-Region-Slug": "hyderabad",
+        "X-Platform-Code": "ANDROID",
+        "X-App-Version": app_version,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept-Encoding": "gzip, deflate"
+    }
+
+def notification_worker(notif_queue, start_time):
+    logger.info("    -> [THREAD] 🔔 Notification sender background thread active.")
+    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        try:
+            # Block for up to 2 seconds waiting for an item in the queue
+            notif_data = notif_queue.get(timeout=2)
+            trigger_ntfy(notif_data["msg"], attach_url=notif_data.get("attach_url"))
+            notif_queue.task_done()
+        except queue.Empty:
+            continue
+
+def humanize_date(date_str):
+    if not date_str or len(date_str) != 8:
+        return date_str
+    dt = datetime.strptime(date_str, "%Y%m%d")
+    day = dt.day
+    if 11 <= (day % 100) <= 13:
+        suffix = 'th'
+    else:
+        suffix = ['th', 'st', 'nd', 'rd', 'th'][min(day % 10, 4)]
+    month_name = dt.strftime("%B")
+    return f"{day}{suffix} {month_name}"
+
+def quiet_git_pull():
+    logger.debug("[GIT] Executing Git pull...")
+    subprocess.run(["git", "fetch", "origin", "main"], capture_output=True, check=False)
+    subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, check=False)
+
+def quiet_git_push():
+    logger.debug("[GIT] Executing Git push...")
+    res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True, check=False)
+    if res.returncode != 0:
+        logger.warning(f"[GIT] Push failed. Stderr: {res.stderr.strip()}")
+    return res.returncode == 0
+
+def load_state():
+    logger.info("[GIT] Loading initial state from repository...")
+    quiet_git_pull()
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+                # Ensure it's the new format
+                if "available_seats" in data:
+                    return data
+        except json.JSONDecodeError:
+            logger.warning("Failed to decode local state JSON.")
+    return {}
+
+def save_state_async(state_dict):
+    def _background_save():
+        logger.info("\n[GIT] Background state save initiated...")
+        for attempt in range(3):
+            quiet_git_pull()
+            with open(STATE_FILE, "w") as f:
+                json.dump(state_dict, f, indent=2)
+            
+            subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+            if STATE_FILE in status.stdout:
+                subprocess.run(["git", "commit", "-m", "Wave state update"], capture_output=True, check=False)
+                if quiet_git_push():
+                    logger.info("[STATE] ✅ State saved and pushed to remote.")
+                    return
+                time.sleep(2)
+            else:
+                return
+    
+    # Fire and forget thread
+    threading.Thread(target=_background_save, daemon=True).start()
+
+def grabroom_producer_loop():
+    logger.info("[GRABROOM] 📡 Supabase Delivery thread started.")
+    
+    endpoint = f"{SUPABASE_URL}/rest/v1/tickets"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation, resolution=merge-duplicates"
+    }
+
+    while True:
+        try:
+            payload = grabroom_queue.get()
+            if payload is None: break
+            
+            while True: # Guaranteed delivery retry loop
+                try:
+                    resp = requests.post(endpoint, json=payload, headers=headers, timeout=10)
+                    if resp.status_code in [200, 201]:
+                        logger.info(f"[GRABROOM] 🟢 Successfully saved ticket {payload['seat']} to Supabase!")
+                        break 
+                    elif resp.status_code == 409:
+                        logger.warning(f"[GRABROOM] ⚠️ Seat {payload['seat']} already exists in DB. Skipping.")
+                        break
+                    else:
+                        logger.warning(f"[GRABROOM] ⚠️ Supabase returned {resp.status_code}: {resp.text}. Retrying in 2s...")
+                except Exception as e:
+                    logger.error(f"[GRABROOM] ❌ Network error sending to Supabase: {e}. Retrying in 2s...")
+                
+                time.sleep(2)
+                
+            grabroom_queue.task_done()
+        except Exception as e:
+            logger.error(f"[GRABROOM] Thread error: {e}")
+
+def trigger_ntfy(message, attach_url=None):
+    logger.info(f"🔔 ALERTING VIA NTFY:\n{message}")
+    headers = {"Priority": "urgent"}
+    if attach_url:
+        headers["Attach"] = attach_url
+        
+    for i in range(1):
+        try:
+            resp = requests.post(f"https://ntfy.sh/{TOPIC}", data=message.encode('utf-8'), headers=headers, timeout=10)
+            if resp.status_code == 200:
+                logger.info(f"✅ Ntfy ping sent! Status: {resp.status_code}")
+        except Exception as e:
+            logger.error(f"❌ Ntfy ping failed: {e}")
+
+def start_warp():
+    logger.info("    -> 🛡️ Connecting Cloudflare WARP (Switching to Proxy)...")
+    subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
+    time.sleep(5)
+
+def make_bms_request(method, url, network_state, max_retries=15, **kwargs):
+    for attempt in range(1, max_retries + 1):
+        current_proxies = None
+        
+        # State Machine: 0 (Raw IP), 1 (WARP), 2 (Pool Proxy)
+        if network_state["state"] == 1:
+            current_proxies = PROXIES
+        elif network_state["state"] == 2:
+            if not network_state.get("pool_proxy") and PROXY_POOL:
+                proxy_url = random.choice(PROXY_POOL)
+                network_state["pool_proxy"] = {"http": proxy_url, "https": proxy_url}
+            current_proxies = network_state.get("pool_proxy")
+
+        try:
+            if method.upper() == 'GET':
+                resp = cffi_requests.get(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
+                logger.info(f"{resp.status_code}")
+            else:
+                resp = cffi_requests.post(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
+                logger.info(f"{resp.status_code}")
+            
+            if resp.status_code in [429, 403]:
+                #time.sleep(3)
+                time.sleep(random.uniform(5, 9))
+                logger.warning(f"    -> 🚧 WAF Block (HTTP {resp.status_code}) on {method}. Thread jumping network state. (Attempt {attempt}/{max_retries})")
+                if attempt < max_retries:
+                    max_states = network_state.get("max_states", 3)
+                    
+                    # Jumping Loop:
+                    # If max_states=2: 0 -> 1 -> 0
+                    # If max_states=3: 0 -> 1 -> 2 -> 0
+                    network_state["state"] = (network_state["state"] + 1) % max_states
+                    
+                    if network_state["state"] == 2:
+                        network_state["pool_proxy"] = None # Force a new random proxy to be picked next loop
+                    time.sleep(1)
+                    continue
+            return resp
+        except Exception as e:
+            logger.error(f"🌐 Request error on {method} (State {network_state['state']}, Attempt {attempt}/{max_retries}): {e}")
+            if attempt < max_retries: 
+                time.sleep(3)
+                continue
+    return None
+
+# =======================================================
+# PHASE 1: SHOWTIME MONITORING (USING VENUE API)
+# =======================================================
+def find_target_session():
+    network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
+    try:
+        # Convert strings like "12:00 PM" into datetime.time objects for mathematical comparison
+        target_time_start_obj = datetime.strptime(TARGET_TIME_START, "%I:%M %p").time()
+        target_time_end_obj = datetime.strptime(TARGET_TIME_END, "%I:%M %p").time()
+    except Exception as e:
+        logger.error(f"❌ Time parsing error in config (TARGET_TIME_START/END). Error: {e}")
+        return []
+
+    valid_shows = []
+    
+    for date_code in DATES:
+        url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
+        resp = make_bms_request('GET', url, network_state=network_state, headers=generate_headers(is_post=False))
+        logger.info(f"{resp.status_code}")
+        if not resp or resp.status_code != 200: 
+            continue
+            
+        fallback_logged = False
+            
+        try:
+            data = resp.json()
+            show_details_list = data.get("ShowDetails", [])
+            
+            for show_detail in show_details_list:
+                for event in show_detail.get("Event", []):
+                    # Check both parent and child level for the matching Movie Code
+                    parent_code = event.get("EventCode", "")
+                    event_title = event.get("EventTitle", "Unknown Title") # <-- NEW
+                    for child in event.get("ChildEvents", []):
+                        current_event_code = child.get("EventCode", parent_code)
+                        current_event_dimension = child.get("EventDimension", "")
+                        event_language = child.get("EventLanguage", "Unknown Language") # <-- NEW
+                        
+                        for show in child.get("ShowTimes", []):
+                            # --- NEW: Constraint Check 0: Strict Date Verification ---
+                            s_date_code = show.get("ShowDateCode", "")
+                            if s_date_code != date_code:
+                                if not fallback_logged:
+                                    logger.info(f"    -> ⚠️ API fallback detected! Requested {date_code} but received {s_date_code}. Ignoring fallback shows.")
+                                    fallback_logged = True
+                                continue
+                            
+                            s_attr = show.get("Attributes", "")
+                            
+                            # 1. Constraint Check: Screen Attribute
+                            if TARGET_ATTRIBUTE.lower() not in s_attr.lower():
+                                continue
+                                
+                            s_time_str = show.get("ShowTime", "")
+                            try:
+                                s_time_obj = datetime.strptime(s_time_str, "%I:%M %p").time()
+                            except:
+                                continue
+                            
+                            # 2. Constraint Check: Time Range
+                            if target_time_start_obj <= s_time_obj <= target_time_end_obj:
+                                valid_shows.append({
+                                    "sessionId": show.get("SessionId"),
+                                    "eventCode": current_event_code,
+                                    "eventTitle": event_title,               # <-- NEW
+                                    "eventLanguage": event_language,         # <-- NEW
+                                    "eventDimension": current_event_dimension,
+                                    "dateCode": show.get("ShowDateCode"),
+                                    "time": s_time_str,
+                                    "attribute": s_attr,
+                                    "datetime_obj": s_time_obj,
+                                    "screen": show.get("ScreenName", "Unknown")
+                                })
+        except Exception as e:
+            logger.error(f"    -> ❌ Error parsing venue JSON for {date_code}: {e}")
+            pass
+            
+    if valid_shows:
+        valid_shows.sort(key=lambda x: x["datetime_obj"])
+        return valid_shows[:6]  # <-- Returns up to 5 shows
+        
+    return []
+
+def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
+    # Isolated network state per dynamic thread
+    local_network = {"state": 0, "pool_proxy": None, "max_states": 3}
+    
+    while True:
+        try:
+            # Self-destruct if idle for 30 seconds
+            task = task_queue.get(timeout=IDLE_TIMEOUT)
+        except queue.Empty:
+            logger.debug("    -> 💀 Dynamic thread idle for 30s. Self-destructing.")
+            return
+
+        s_id, meta, c_code, a_id, t_cat, e_code = task["session_id"], task["meta"], task["c_code"], task["a_id"], task["ticket_category"], task["event_code"]
+        
+        success = False
+        for attempt in range(MAX_SEAT_RETRIES):
+            t_id, t_uid, b_id = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
+            if t_id:
+                msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
+                notif_queue.put({"msg": msg})
+                
+                # --- GRABROOM TELEMETRY ---
+                ticket_payload = {
+                    "seat": f"{task['row']}{task['seat_num']}",
+                    "booking_id": b_id,
+                    "transaction_id": t_id,
+                    "trans_uid": t_uid,
+                    "venue_code": VENUE_CODE,
+                    "event_title": task.get("event_title"),
+                    "event_language": task.get("event_language"),
+                    "event_dimension": task.get("event_dimension"),
+                    "show_date_code": task.get("date_code"),
+                    "show_time": task.get("time"),
+                    "screen_name": task.get("screen"),
+                    "attributes": task.get("attribute"),
+                    "snipe_timestamp": int(time.time() * 1000)
+                }
+                grabroom_queue.put(ticket_payload)
+                
+                success = True
+                break
+            time.sleep(1) # Delay between retries
+            
+        if not success:
+            logger.warning(f"    -> ❌ Seat {task['row']}{task['seat_num']} exhausted {MAX_SEAT_RETRIES} retries. Declared dead for Wave {wave_num}.")
+
+        task_queue.task_done()
+
+# =======================================================
+# PHASE 2 & 3: THREAD WORKER / LAYOUT PARSING
+# =======================================================
+def fetch_seat_layout(session_id, network_state):
+    url = "https://services-in.bookmyshow.com/doTrans.aspx"
+    payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
+    resp = make_bms_request('POST', url, network_state=network_state, headers=generate_headers(is_post=True), data=payload)
+    logger.info(f"{resp.status_code}")
+    if not resp or resp.status_code != 200: 
+        return ""
+    try: 
+        return resp.json().get("BookMyShow", {}).get("strData", "")
+    except Exception: 
+        return ""
+
+def parse_layout(str_data):
+    if not str_data: return {}, {}, {}, 0
+    parts = str_data.split("||")
+    header_data = parts[0]
+    
+    categories = {}
+    for cat in header_data.split("|"):
+        c_parts = cat.split(":")
+        if len(c_parts) >= 4:
+            categories[c_parts[1]] = {"cat_code": c_parts[2], "area_id": c_parts[3]}
+            
+    rows_data = parts[1] if len(parts) > 1 else parts[0]
+    rows = rows_data.split("|")
+    
+    available_seats_by_row = {}
+    seat_metadata = {} 
+    
+    for row in rows:
+        if not row or ":" not in row: continue
+        elements = row.split(":")
+        row_index = elements[0]
+        row_letter = elements[1]
+        seats = elements[2:]
+        
+        available_in_row = []
+        for seat in seats:
+            match = re.search(r"([A-Z])[14](\d+)\+(\d+)", seat)
+            if match:
+                block_code = match.group(1)
+                backend_seat = match.group(2)
+                seat_num = match.group(3)
+                
+                available_in_row.append(seat_num)
+                seat_metadata[f"{row_letter}_{seat_num}"] = {
+                    "block_code": block_code,
+                    "row_index": row_index,
+                    "backend_seat": backend_seat
+                }
+                
+        if available_in_row:
+            available_seats_by_row[row_letter] = available_in_row
+
+    total_available_seats = sum(len(seats) for seats in available_seats_by_row.values())
+    return available_seats_by_row, categories, seat_metadata, total_available_seats
+
+def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier, dump_barrier):
+    # This thread stays alive for all remaining waves
+    for wave_num in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
+        
+        # 1. Cooldown Check
+        time_passed = time.time() - state_dict["last_wave_finish_timestamp"]
+        if state_dict["last_wave_finish_timestamp"] > 0 and time_passed < 285:
+            sleep_time = 285 - time_passed
+            logger.info(f"    -> 💤 Static Thread {session_id} waiting {int(sleep_time)}s for Wave {wave_num} cooldown...")
+            time.sleep(sleep_time)
+
+        # 2. Warmup Phase
+        logger.info(f"    -> 🔥 Static Thread {session_id} entering Warmup for Wave {wave_num}...")
+        warmup_network = {"state": 0, "pool_proxy": None, "max_states": 2}
+        roster = list(my_seats.values())
+        
+        if roster and wave_num > 1: # FIX: Skip warmup entirely for Wave 1
+            while not global_trigger.is_set():
+                test_seat = random.choice(roster)
+                t_id, t_uid, b_id = lock_seat(session_id, test_seat["meta"]["row_index"], test_seat["meta"]["backend_seat"], test_seat["c_code"], test_seat["a_id"], test_seat["ticket_category"], test_seat["event_code"], warmup_network)
+                
+                if t_id:
+                    # 1. ALWAYS process the successfully locked seat, no matter what
+                    roster.remove(test_seat) 
+                    
+                    msg = f"[WAVE {wave_num}] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
+                    notif_queue.put({"msg": msg})
+                    
+                    # --- GRABROOM TELEMETRY ---
+                    ticket_payload = {
+                        "seat": f"{test_seat['row']}{test_seat['seat_num']}",
+                        "booking_id": b_id,
+                        "transaction_id": t_id,
+                        "trans_uid": t_uid,
+                        "venue_code": VENUE_CODE,
+                        "event_title": test_seat.get("event_title"),
+                        "event_language": test_seat.get("event_language"),
+                        "event_dimension": test_seat.get("event_dimension"),
+                        "show_date_code": test_seat.get("date_code"),
+                        "show_time": test_seat.get("time"),
+                        "screen_name": test_seat.get("screen"),
+                        "attributes": test_seat.get("attribute"),
+                        "snipe_timestamp": int(time.time() * 1000)
+                    }
+                    grabroom_queue.put(ticket_payload)
+
+                    # 2. THEN check if this thread needs to be the one to flip the trigger
+                    if not global_trigger.is_set():
+                        global_trigger.set()
+                        
+                    # 3. Break out of the warmup loop
+                    break
+                time.sleep(3)
+        
+        # 3. Main Locking Triggered - Dump seats to queue
+        # Wait until someone triggers the event (if this thread didn't)
+        global_trigger.wait() 
+        for seat in roster:
+            task_queue.put(seat)
+            
+        dump_barrier.wait() # <--- ADD THIS: Wait for all threads to finish dumping
+            
+        # 4. Wait for all 6 static threads AND the main thread to reach this barrier before continuing to next wave
+        wave_barrier.wait()
+
+# =======================================================
+# PHASE 3 (cont): AUTO-LOCK / PAYMENT SNIPER 
+# =======================================================
+def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_category, event_code, network_state):
+    logger.info(f"    -> 🔒 [SNIPER] Request 1: Attempting to lock internal Row {row_index} Seat {backend_seat} ({cat_code})...")
+    url = "https://in.bookmyshow.com/api/v2/mobile/booking/movies"
+
+    dynamic_bms_id = f"1.4{random.randint(1000000, 9999999)}.{random.randint(1000000000000, 9999999999999)}"
+    dynamic_version = f"1{random.randint(10000, 99999)}"
+    dynamic_ua = random.choice(user_agents)
+    
+    payload = {
+        "appCode": "MOBAND2",
+        "venueCode": VENUE_CODE,
+        "sessionId": str(session_id),
+        "ticketCategory": ticket_category,
+        "numberOfTickets": "1",
+        "selectedSeats": f"|1|{cat_code}|{area_id}|{row_index}|{backend_seat}|",
+        "email": EMAIL,
+        "eventCode": event_code,
+        "version": dynamic_version,
+        "platform": "ANDROID",
+        "phone": PHONE,
+        "bmsId": dynamic_bms_id,
+        "seatLayoutType": "Y",
+        "offerData": {}
+    }
+
+    headers = {
+        "Host": "in.bookmyshow.com",
+        "X-Latitude": "17.385044",
+        "X-Subregion-Code": "HYD",
+        "X-App-Code": "MOBAND2",
+        "X-Phone": PHONE,
+        "User-Agent": dynamic_ua,
+        "X-Longitude": "78.48667",
+        "X-Platform": "AND",
+        "X-Region-Code": "HYD",
+        "X-Platform-Code": "ANDROID",
+        "X-Email": EMAIL,
+        "Content-Type": "text/plain; charset=utf-8",
+        "Accept-Encoding": "gzip, deflate, br"
+    }
+
+    data_str = json.dumps(payload, separators=(',', ':'))
+    resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=data_str.encode('utf-8'))
+    logger.info(f"{resp.status_code}")
+    if resp and resp.status_code == 200:
+        try:
+            r_json = resp.json()
+            t_id = r_json.get("transactionId")
+            t_uid = r_json.get("transactionUID")
+            b_id = r_json.get("bookingId") # <-- Extract booking ID
+            if t_id and t_uid:
+                logger.info(f"    -> 🟢 [SNIPER] SUCCESS! Seat locked! TransID: {t_id}")
+                return t_id, t_uid, b_id
+        except Exception as e:
+            logger.error(f"    -> ❌ [SNIPER] Error parsing Request 1: {e}")
+    
+    logger.error("    -> 🔴 [SNIPER] FAILED to lock seat.")
+    return None, None, None
+
+# =======================================================
+# MAIN LOOP STATE MACHINE
+# =======================================================
+def gha_sigterm_handler(signum, frame):
+    logger.warning("\n⚠️ SIGTERM received (GitHub Actions cancellation). Forcing early shutdown...")
+    sys.exit(0) # Triggers the 'finally' block
+
+def main():
+    start_time = time.time()
+    signal.signal(signal.SIGTERM, gha_sigterm_handler)
+    grabroom_thread = threading.Thread(target=grabroom_producer_loop, daemon=True)
+    grabroom_thread.start()
+    logger.info("==================================================")
+    logger.info("🚀 STARTING TARGETED SEAT SNIPER (MULTI-THREADED)")
+    logger.info("==================================================\n")
+
+    state_dict = load_state()
+    notif_queue = queue.Queue()
+    task_queue = queue.Queue()
+    global_trigger = threading.Event()
+    
+    # --- Start Notification Worker ---
+    notif_t = threading.Thread(target=notification_worker, args=(notif_queue, start_time))
+    notif_t.daemon = True
+    notif_t.start()
+
+    # --- PHASE 1: State Setup / Initial Discovery ---
+    if not state_dict:
+        logger.info("    -> [PHASE 1] No state found. Scanning Venue API for target showtimes...")
+        target_sessions = []
+        
+        while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+            target_sessions = find_target_session()
+            if not target_sessions:
+                logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 8 seconds...")
+                time.sleep(8)
+            else:
+                logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
+                break
+                
+        if not target_sessions:
+            logger.info("🏁 Max runtime reached before shows were listed. Shutting down.")
+            return
+
+        logger.info("    -> [PHASE 1] Polling Seat Layouts for initial discovery...")
+        available_seats = {}
+        layout_network_state = {"state": 0, "pool_proxy": None, "max_states": 2}
+        
+        for session in target_sessions:
+            s_id = session["sessionId"]
+            str_data = ""
+            
+            # Fetch layout with wait loop
+            while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+                str_data = fetch_seat_layout(s_id, layout_network_state)
+                if str_data: 
+                    break
+                time.sleep(2)
+                
+            current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
+            if "3D" in session.get("eventDimension", "").upper():
+                ticket_category = ROW_CATEGORY_MAP_3D.get(row, "0008") # 0008 is default 3D Gold
+            else:
+                ticket_category = ROW_CATEGORY_MAP_2D.get(row, "0004") # 0004 is default 2D Gold
+            
+            for target_row, target_seat_list in DESIRED_SEATS.items():
+                if target_row not in current_seats: continue
+                
+                for target_seat in target_seat_list:
+                    if target_seat in current_seats[target_row]:
+                        seat_key = f"{s_id}_{target_row}_{target_seat}"
+                        meta = seat_metadata.get(f"{target_row}_{target_seat}")
+                        if not meta: continue
+                        
+                        cat_info = categories_map.get(meta["block_code"])
+                        if not cat_info: continue
+                        
+                        available_seats[seat_key] = {
+                            "session_id": s_id,
+                            "row": target_row,
+                            "seat_num": target_seat,
+                            "meta": meta,
+                            "c_code": cat_info["cat_code"],
+                            "a_id": cat_info["area_id"],
+                            "ticket_category": ticket_category,
+                            "event_code": session["eventCode"],
+                            "event_title": session.get("eventTitle"),
+                            "event_language": session.get("eventLanguage"),
+                            "event_dimension": session.get("eventDimension"),
+                            "date_code": session.get("dateCode"),
+                            "time": session.get("time"),
+                            "screen": session.get("screen"),
+                            "attribute": session.get("attribute")
+                        }
+        
+        state_dict = {
+            "completed_waves": 0,
+            "last_wave_finish_timestamp": 0,
+            "available_seats": available_seats
+        }
+        save_state_async(state_dict)
+        logger.info(f"    -> [STATE] Initial state built with {len(available_seats)} available desired seats.")
+        
+    elif state_dict.get("completed_waves", 0) >= MAX_WAVES:
+        logger.info("🏁 Previous runners completed all waves. Shutting down.")
+        return
+    else:
+        logger.info(f"    -> 🔄 Resuming from state! Skipped API polling. Starting at Wave {state_dict['completed_waves'] + 1}")
+
+    # --- Group Seats by Session ---
+    seats_by_session = {}
+    for key, seat_data in state_dict.get("available_seats", {}).items():
+        s_id = seat_data["session_id"]
+        if s_id not in seats_by_session:
+            seats_by_session[s_id] = {}
+        seats_by_session[s_id][key] = seat_data
+        
+    num_static_threads = len(seats_by_session)
+    if num_static_threads == 0:
+        logger.info("    -> 🛑 No desired seats were available to snipe. Shutting down.")
+        return
+
+    # Synchronize the main orchestrator thread with exact number of static threads
+    wave_barrier = threading.Barrier(num_static_threads + 1)
+    dump_barrier = threading.Barrier(num_static_threads + 1) # <--- ADD THIS
+
+    logger.info("    -> 🛡️ Pre-warming WARP Proxy before spawning threads...")
+    start_warp()
+
+    # --- PHASE 2: Spawn Static Producer Threads ---
+    logger.info(f"    -> 🚀 Spawning {num_static_threads} static producer threads...")
+    for s_id, seats in seats_by_session.items():
+        t = threading.Thread(
+            target=static_show_manager, 
+            args=(s_id, seats, task_queue, notif_queue, state_dict, global_trigger, wave_barrier, dump_barrier)
+        )
+        t.daemon = True
+        t.start()
+
+    # --- PHASE 3: Wave Orchestration (Main Thread) ---
+    try:
+        for wave in range(state_dict["completed_waves"] + 1, MAX_WAVES + 1):
+            logger.info(f"\n================= [ WAVE {wave} ] =================")
+            if wave == 1:
+                logger.info("    -> ⏩ Wave 1 detected. Bypassing warmup and forcing trigger immediately.")
+                global_trigger.set() # FIX: Force immediate trigger on Wave 1
+            else:
+                logger.info("    -> ⏳ Waiting for a static thread to trigger the main locking phase...")
+            
+            # 1. Wait for a static thread to get a 200 OK during Warmup
+            global_trigger.wait()
+
+            state_dict["last_wave_finish_timestamp"] = time.time()
+            
+            # 2. Trigger flipped! Spawn dynamic threads to consume the queue
+            logger.info(f"    -> 🌊 WAVE {wave} TRIGGERED! Spawning {MAX_DYNAMIC_THREADS} dynamic threads...")
+            for _ in range(MAX_DYNAMIC_THREADS):
+                dt = threading.Thread(target=dynamic_sniper_worker, args=(task_queue, notif_queue, wave))
+                dt.daemon = True
+                dt.start()
+                
+            dump_barrier.wait() # <--- ADD THIS: Do not join the queue until EVERY thread has dumped!
+                
+            # 3. Wait for all tasks to be processed by the dynamic threads
+            task_queue.join()
+            logger.info(f"    -> ✅ WAVE {wave} TASKS COMPLETED.")
+            
+            # 4. Save State asynchronously
+            state_dict["completed_waves"] = wave
+            save_state_async(state_dict) # Removed duplicate timestamp update here
+            
+            # 5. Reset global trigger for the next wave
+            global_trigger.clear()
+            
+            # 6. Hit the barrier to sync all threads and move to next wave's cooldown together
+            wave_barrier.wait()
+
+        logger.info("\n🏁 All 5 Waves completed successfully. Shutting down cleanly.")
+        
+    finally:
+        logger.info("\n🏁 Flushing queues. Waiting for Grabroom delivery to complete...")
+        def _flush_queue():
+            grabroom_queue.join()
+        
+        flush_thread = threading.Thread(target=_flush_queue)
+        flush_thread.start()
+        flush_thread.join(timeout=10.0) 
+
+        if not notif_queue.empty():
+            logger.info("⏳ Waiting for remaining notifications to be sent...")
+            notif_queue.join()
+        
+if __name__ == "__main__":
+    main()
