@@ -1,0 +1,174 @@
+{
+  "completed_waves": 0,
+  "last_wave_finish_timestamp": 0,
+  "available_seats": {
+    "4167_S_28": {
+      "session_id": "4167",
+      "row": "S",
+      "seat_num": "28",
+      "meta": {
+        "block_code": "D",
+        "row_index": "9",
+        "backend_seat": "06"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00513073",
+      "event_title": "Irumudi",
+      "event_language": "Telugu",
+      "event_dimension": "DOLBY CINEMA 2D",
+      "date_code": "20260825",
+      "time": "10:00 AM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "4167_S_29": {
+      "session_id": "4167",
+      "row": "S",
+      "seat_num": "29",
+      "meta": {
+        "block_code": "D",
+        "row_index": "9",
+        "backend_seat": "05"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00513073",
+      "event_title": "Irumudi",
+      "event_language": "Telugu",
+      "event_dimension": "DOLBY CINEMA 2D",
+      "date_code": "20260825",
+      "time": "10:00 AM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "4167_S_30": {
+      "session_id": "4167",
+      "row": "S",
+      "seat_num": "30",
+      "meta": {
+        "block_code": "D",
+        "row_index": "9",
+        "backend_seat": "04"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00513073",
+      "event_title": "Irumudi",
+      "event_language": "Telugu",
+      "event_dimension": "DOLBY CINEMA 2D",
+      "date_code": "20260825",
+      "time": "10:00 AM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "4167_S_31": {
+      "session_id": "4167",
+      "row": "S",
+      "seat_num": "31",
+      "meta": {
+        "block_code": "D",
+        "row_index": "9",
+        "backend_seat": "03"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00513073",
+      "event_title": "Irumudi",
+      "event_language": "Telugu",
+      "event_dimension": "DOLBY CINEMA 2D",
+      "date_code": "20260825",
+      "time": "10:00 AM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "4202_S_28": {
+      "session_id": "4202",
+      "row": "S",
+      "seat_num": "28",
+      "meta": {
+        "block_code": "D",
+        "row_index": "9",
+        "backend_seat": "06"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00504055",
+      "event_title": "The Odyssey",
+      "event_language": "English",
+      "event_dimension": "DOLBY CINEMA 2D",
+      "date_code": "20260825",
+      "time": "01:05 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "4202_S_29": {
+      "session_id": "4202",
+      "row": "S",
+      "seat_num": "29",
+      "meta": {
+        "block_code": "D",
+        "row_index": "9",
+        "backend_seat": "05"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00504055",
+      "event_title": "The Odyssey",
+      "event_language": "English",
+      "event_dimension": "DOLBY CINEMA 2D",
+      "date_code": "20260825",
+      "time": "01:05 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "4202_S_30": {
+      "session_id": "4202",
+      "row": "S",
+      "seat_num": "30",
+      "meta": {
+        "block_code": "D",
+        "row_index": "9",
+        "backend_seat": "04"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00504055",
+      "event_title": "The Odyssey",
+      "event_language": "English",
+      "event_dimension": "DOLBY CINEMA 2D",
+      "date_code": "20260825",
+      "time": "01:05 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "4202_S_31": {
+      "session_id": "4202",
+      "row": "S",
+      "seat_num": "31",
+      "meta": {
+        "block_code": "D",
+        "row_index": "9",
+        "backend_seat": "03"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00504055",
+      "event_title": "The Odyssey",
+      "event_language": "English",
+      "event_dimension": "DOLBY CINEMA 2D",
+      "date_code": "20260825",
+      "time": "01:05 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    }
+  }
+}
