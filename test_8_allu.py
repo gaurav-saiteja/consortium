@@ -696,6 +696,12 @@ def main():
             for target_row, target_seat_list in DESIRED_SEATS.items():
                 if target_row not in current_seats: continue
                 
+                # ✅ FIX: Calculate ticket_category for the specific target_row
+                if "3D" in session.get("eventDimension", "").upper():
+                    ticket_category = ROW_CATEGORY_MAP_3D.get(target_row, "0008") # 0008 is default 3D Gold
+                else:
+                    ticket_category = ROW_CATEGORY_MAP_2D.get(target_row, "0004") # 0004 is default 2D Gold
+                
                 for target_seat in target_seat_list:
                     if target_seat in current_seats[target_row]:
                         seat_key = f"{s_id}_{target_row}_{target_seat}"
@@ -712,7 +718,7 @@ def main():
                             "meta": meta,
                             "c_code": cat_info["cat_code"],
                             "a_id": cat_info["area_id"],
-                            "ticket_category": ticket_category,
+                            "ticket_category": ticket_category, # ✅ Correctly mapped category is used here
                             "event_code": session["eventCode"],
                             "event_title": session.get("eventTitle"),
                             "event_language": session.get("eventLanguage"),
