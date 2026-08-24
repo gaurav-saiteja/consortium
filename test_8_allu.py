@@ -688,10 +688,6 @@ def main():
                 time.sleep(2)
                 
             current_seats, categories_map, seat_metadata, total_available = parse_layout(str_data)
-            if "3D" in session.get("eventDimension", "").upper():
-                ticket_category = ROW_CATEGORY_MAP_3D.get(row, "0008") # 0008 is default 3D Gold
-            else:
-                ticket_category = ROW_CATEGORY_MAP_2D.get(row, "0004") # 0004 is default 2D Gold
             
             for target_row, target_seat_list in DESIRED_SEATS.items():
                 if target_row not in current_seats: continue
