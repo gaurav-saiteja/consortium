@@ -60,7 +60,7 @@ ROW_CATEGORY_MAP_2D = {
 }
 
 DESIRED_SEATS = {
-    "R": ["28", "29", "30", "31"]
+    "S": ["28", "29", "30", "31"]
 }
 
 PROXY_POOL = []
