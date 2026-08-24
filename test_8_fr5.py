@@ -48,16 +48,13 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 grabroom_queue = queue.Queue()
 
 DESIRED_SEATS = {
-    "N": ["1", "2", "3"],
-    "M": ["1", "2", "3"],
-    "L": ["1", "2", "3"],
-    "K": ["1", "2", "3"],
-    "J": ["1", "2", "3"],
-    "I": ["1", "2", "3"],
-    "H": ["1", "2", "3"],
-    "G": ["1", "2", "3"],
-    "F": ["1", "2", "3"],
-    "E": ["1", "2", "3"],
+    "I": ["22", "23", "24", "25", "26", "27"],
+    "J": ["22", "23", "24", "25", "26", "27"],
+    "K": ["22", "23", "24", "25", "26", "27"],
+    "L": ["22", "23", "24", "25", "26", "27"],
+    "F": ["22", "23", "24", "25", "26", "27"],
+    "G": ["22", "23", "24", "25", "26", "27"],
+    "H": ["22", "23", "24", "25", "26", "27"]
 }
 
 PROXY_POOL = []
@@ -504,8 +501,8 @@ def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dic
         
         # 1. Cooldown Check
         time_passed = time.time() - state_dict["last_wave_finish_timestamp"]
-        if state_dict["last_wave_finish_timestamp"] > 0 and time_passed < 275:
-            sleep_time = 275 - time_passed
+        if state_dict["last_wave_finish_timestamp"] > 0 and time_passed < 290:
+            sleep_time = 290 - time_passed
             logger.info(f"    -> 💤 Static Thread {session_id} waiting {int(sleep_time)}s for Wave {wave_num} cooldown...")
             time.sleep(sleep_time)
 
