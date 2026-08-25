@@ -1,0 +1,384 @@
+{
+  "completed_waves": 0,
+  "last_wave_finish_timestamp": 0,
+  "available_seats": {
+    "255053_I_22": {
+      "session_id": "255053",
+      "row": "I",
+      "seat_num": "22",
+      "meta": {
+        "block_code": "A",
+        "row_index": "6",
+        "backend_seat": "0126"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_K_27": {
+      "session_id": "255053",
+      "row": "K",
+      "seat_num": "27",
+      "meta": {
+        "block_code": "A",
+        "row_index": "4",
+        "backend_seat": "0121"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_F_22": {
+      "session_id": "255053",
+      "row": "F",
+      "seat_num": "22",
+      "meta": {
+        "block_code": "A",
+        "row_index": "9",
+        "backend_seat": "0126"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_F_23": {
+      "session_id": "255053",
+      "row": "F",
+      "seat_num": "23",
+      "meta": {
+        "block_code": "A",
+        "row_index": "9",
+        "backend_seat": "0125"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_F_24": {
+      "session_id": "255053",
+      "row": "F",
+      "seat_num": "24",
+      "meta": {
+        "block_code": "A",
+        "row_index": "9",
+        "backend_seat": "0124"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_F_25": {
+      "session_id": "255053",
+      "row": "F",
+      "seat_num": "25",
+      "meta": {
+        "block_code": "A",
+        "row_index": "9",
+        "backend_seat": "0123"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_F_26": {
+      "session_id": "255053",
+      "row": "F",
+      "seat_num": "26",
+      "meta": {
+        "block_code": "A",
+        "row_index": "9",
+        "backend_seat": "0122"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_F_27": {
+      "session_id": "255053",
+      "row": "F",
+      "seat_num": "27",
+      "meta": {
+        "block_code": "A",
+        "row_index": "9",
+        "backend_seat": "0121"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_G_22": {
+      "session_id": "255053",
+      "row": "G",
+      "seat_num": "22",
+      "meta": {
+        "block_code": "A",
+        "row_index": "8",
+        "backend_seat": "0126"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_G_23": {
+      "session_id": "255053",
+      "row": "G",
+      "seat_num": "23",
+      "meta": {
+        "block_code": "A",
+        "row_index": "8",
+        "backend_seat": "0125"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_G_24": {
+      "session_id": "255053",
+      "row": "G",
+      "seat_num": "24",
+      "meta": {
+        "block_code": "A",
+        "row_index": "8",
+        "backend_seat": "0124"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_G_25": {
+      "session_id": "255053",
+      "row": "G",
+      "seat_num": "25",
+      "meta": {
+        "block_code": "A",
+        "row_index": "8",
+        "backend_seat": "0123"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_G_26": {
+      "session_id": "255053",
+      "row": "G",
+      "seat_num": "26",
+      "meta": {
+        "block_code": "A",
+        "row_index": "8",
+        "backend_seat": "0122"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_G_27": {
+      "session_id": "255053",
+      "row": "G",
+      "seat_num": "27",
+      "meta": {
+        "block_code": "A",
+        "row_index": "8",
+        "backend_seat": "0121"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_H_22": {
+      "session_id": "255053",
+      "row": "H",
+      "seat_num": "22",
+      "meta": {
+        "block_code": "A",
+        "row_index": "7",
+        "backend_seat": "0126"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_H_23": {
+      "session_id": "255053",
+      "row": "H",
+      "seat_num": "23",
+      "meta": {
+        "block_code": "A",
+        "row_index": "7",
+        "backend_seat": "0125"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255053_H_26": {
+      "session_id": "255053",
+      "row": "H",
+      "seat_num": "26",
+      "meta": {
+        "block_code": "A",
+        "row_index": "7",
+        "backend_seat": "0122"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0009",
+      "event_code": "ET00502600",
+      "event_title": "Spider-Man: Brand New Day",
+      "event_language": "English",
+      "event_dimension": "3D",
+      "date_code": "20260825",
+      "time": "11:20 AM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    },
+    "255054_F_22": {
+      "session_id": "255054",
+      "row": "F",
+      "seat_num": "22",
+      "meta": {
+        "block_code": "A",
+        "row_index": "9",
+        "backend_seat": "0126"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0006",
+      "event_code": "ET00452034",
+      "event_title": "The Odyssey",
+      "event_language": "English",
+      "event_dimension": "2D",
+      "date_code": "20260825",
+      "time": "02:05 PM",
+      "screen": "SCREEN 6",
+      "attribute": "PCX SCREEN"
+    }
+  }
+}
