@@ -1,0 +1,300 @@
+{
+  "completed_waves": 0,
+  "last_wave_finish_timestamp": 1788095998.5884416,
+  "available_seats": {
+    "3745_UPPER BALCONY_A_10": {
+      "session_id": "3745",
+      "row": "A",
+      "seat_num": "10",
+      "meta": {
+        "block_code": "A",
+        "row_index": "17",
+        "backend_seat": "10"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_A_11": {
+      "session_id": "3745",
+      "row": "A",
+      "seat_num": "11",
+      "meta": {
+        "block_code": "A",
+        "row_index": "17",
+        "backend_seat": "11"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_A_12": {
+      "session_id": "3745",
+      "row": "A",
+      "seat_num": "12",
+      "meta": {
+        "block_code": "A",
+        "row_index": "17",
+        "backend_seat": "14"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_A_13": {
+      "session_id": "3745",
+      "row": "A",
+      "seat_num": "13",
+      "meta": {
+        "block_code": "A",
+        "row_index": "17",
+        "backend_seat": "15"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_A_14": {
+      "session_id": "3745",
+      "row": "A",
+      "seat_num": "14",
+      "meta": {
+        "block_code": "A",
+        "row_index": "17",
+        "backend_seat": "16"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_B_10": {
+      "session_id": "3745",
+      "row": "B",
+      "seat_num": "10",
+      "meta": {
+        "block_code": "A",
+        "row_index": "16",
+        "backend_seat": "10"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_B_11": {
+      "session_id": "3745",
+      "row": "B",
+      "seat_num": "11",
+      "meta": {
+        "block_code": "A",
+        "row_index": "16",
+        "backend_seat": "11"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_B_12": {
+      "session_id": "3745",
+      "row": "B",
+      "seat_num": "12",
+      "meta": {
+        "block_code": "A",
+        "row_index": "16",
+        "backend_seat": "14"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_B_13": {
+      "session_id": "3745",
+      "row": "B",
+      "seat_num": "13",
+      "meta": {
+        "block_code": "A",
+        "row_index": "16",
+        "backend_seat": "15"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_UPPER BALCONY_B_14": {
+      "session_id": "3745",
+      "row": "B",
+      "seat_num": "14",
+      "meta": {
+        "block_code": "A",
+        "row_index": "16",
+        "backend_seat": "16"
+      },
+      "c_code": "0000000002",
+      "a_id": "4",
+      "ticket_category": "0001",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_LOWER BALCONY_D_18": {
+      "session_id": "3745",
+      "row": "D",
+      "seat_num": "18",
+      "meta": {
+        "block_code": "B",
+        "row_index": "4",
+        "backend_seat": "20"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0002",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_LOWER BALCONY_D_19": {
+      "session_id": "3745",
+      "row": "D",
+      "seat_num": "19",
+      "meta": {
+        "block_code": "B",
+        "row_index": "4",
+        "backend_seat": "21"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0002",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_LOWER BALCONY_D_20": {
+      "session_id": "3745",
+      "row": "D",
+      "seat_num": "20",
+      "meta": {
+        "block_code": "B",
+        "row_index": "4",
+        "backend_seat": "22"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0002",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    },
+    "3745_LOWER BALCONY_D_21": {
+      "session_id": "3745",
+      "row": "D",
+      "seat_num": "21",
+      "meta": {
+        "block_code": "B",
+        "row_index": "4",
+        "backend_seat": "23"
+      },
+      "c_code": "0000000003",
+      "a_id": "1",
+      "ticket_category": "0002",
+      "event_code": "ET00379307",
+      "event_title": "Toxic: A Fairy Tale for Grown-ups",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20260903",
+      "time": "02:30 PM",
+      "screen": "SUDARSHAN 35MM",
+      "attribute": "4K DOLBY ATMOS"
+    }
+  }
+}
