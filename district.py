@@ -5,13 +5,13 @@ import json
 import os
 import subprocess
 from datetime import datetime, timedelta
+import random
 
 # --- CONFIGURATION ---
 DATES = ["2026-09-11"]
 CINEMA_ID = "1039848"
 TARGET_MOVIE_ID = "OBCISK" # E.g., 'Epic' from the sample response
 TARGET_PREMIUM_LABEL = "64CH ATMOS"
-GUEST_TOKEN = "1789"
 
 STATE_FILE = "district_seat_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -28,7 +28,6 @@ PROXIES = {
 # 1. Headers for district.in (Web Spoofing for GET)
 GET_HEADERS = {
     "Host": "www.district.in",
-    "X-Guest-Token": GUEST_TOKEN,
     "Api_source": "district",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
     "Accept": "*/*",
@@ -39,7 +38,6 @@ GET_HEADERS = {
 # 2. Headers for api.edition.in (Android App Spoofing for POST)
 POST_HEADERS = {
     "Host": "api.edition.in",
-    "X-Guest-Token": GUEST_TOKEN,
     "Content-Type": "application/json; charset=utf-8",
     "User-Agent": "com.application.zomato.district/1000026600 (Linux; U; Android 13; en_US; sdk_gphone64_x86_64; Build/TE1A.240213.009; Cronet/113.0.5672.51)",
     "Accept-Encoding": "gzip, deflate, br"
@@ -141,6 +139,12 @@ def toggle_warp():
 def make_request(method, url, max_retries=3, **kwargs):
     for attempt in range(1, max_retries + 1):
         current_proxies = PROXIES if USE_WARP else None
+
+        if 'headers' in kwargs:
+            headers = kwargs['headers'].copy()
+            headers['X-Guest-Token'] = str(random.randint(1000000, 9999999))
+            kwargs['headers'] = headers
+
         try:
             if method.upper() == 'GET':
                 resp = cffi_requests.get(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
