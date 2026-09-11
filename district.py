@@ -4,7 +4,7 @@ import time
 import json
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
 DATES = ["2026-09-11"]
@@ -49,6 +49,7 @@ def humanize_datetime(iso_str):
     """Parses District's ISO 8601 strings (2026-09-11T13:25) into human readable text."""
     try:
         dt = datetime.fromisoformat(iso_str)
+        dt = dt + timedelta(hours=5, minutes=30)
         day = dt.day
         if 11 <= (day % 100) <= 13:
             suffix = 'th'
@@ -286,6 +287,8 @@ def main():
         for index, session in enumerate(target_sessions, 1):
             s_id = session["sessionId"]
             s_time = session["showTime"]
+
+            ist_log_time = humanize_datetime(s_time)
             
             print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Time: {s_time})")
             print("    -> Sleeping for 1 seconds")
