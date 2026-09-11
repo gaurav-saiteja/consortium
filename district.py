@@ -288,8 +288,8 @@ def main():
             s_time = session["showTime"]
             
             print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Time: {s_time})")
-            print("    -> Sleeping for 4 seconds")
-            time.sleep(4) 
+            print("    -> Sleeping for 1 seconds")
+            time.sleep(1) 
             
             raw_layout_json = fetch_seat_layout(s_id)
             if not raw_layout_json:
