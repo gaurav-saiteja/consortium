@@ -134,7 +134,7 @@ def toggle_warp():
     else:
         print("    -> 🚨 Connecting to WARP (Switching to Cloudflare Proxy)...")
         subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-        time.sleep(5) 
+        time.sleep(3) 
         USE_WARP = True
 
 def make_request(method, url, max_retries=3, **kwargs):
@@ -165,7 +165,7 @@ def make_request(method, url, max_retries=3, **kwargs):
 def fetch_sessions():
     sessions = []
     for date_str in DATES:
-        time.sleep(3)
+        time.sleep(1)
         print(f"\n[NETWORK] Fetching District sessions for Date: {date_str}...")
         
         url = (
@@ -289,7 +289,7 @@ def main():
             
             print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Time: {s_time})")
             print("    -> Sleeping for 26 seconds (Rate Limit Prevention)...")
-            time.sleep(26) 
+            time.sleep(4) 
             
             raw_layout_json = fetch_seat_layout(s_id)
             if not raw_layout_json:
