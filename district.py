@@ -17,7 +17,7 @@ STATE_FILE = "district_seat_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
 
 # Track WARP State natively
-USE_WARP = False
+USE_WARP = True
 
 # Cloudflare WARP local proxy
 PROXIES = {
