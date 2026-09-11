@@ -208,7 +208,7 @@ def fetch_seat_layout(session_id):
         "sessionId": session_id
     }
     
-    print(f"    -> [POST] {url.split('?')[0]} (Session: {session_id})")
+    print(f"    -> [POST] (Session: {session_id})")
     resp = make_request('POST', url, headers=POST_HEADERS, json=payload)
     
     if not resp or resp.status_code != 200:
@@ -288,7 +288,7 @@ def main():
             s_time = session["showTime"]
             
             print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Time: {s_time})")
-            print("    -> Sleeping for 26 seconds (Rate Limit Prevention)...")
+            print("    -> Sleeping for 4 seconds")
             time.sleep(4) 
             
             raw_layout_json = fetch_seat_layout(s_id)
@@ -327,10 +327,8 @@ def main():
                         human_time = humanize_datetime(s_time)
 
                         msg = (
-                            f"[{newly_unblocked_count}] {TARGET_PREMIUM_LABEL} seats unblocked!\n"
-                            f"Movie: {TARGET_MOVIE_ID}\n"
-                            f"Rows Unblocked: {rows_str}\n"
-                            f"Time: {human_time}"
+                            f"[{newly_unblocked_count}] {rows_str} unblocked\n"
+                            f"{TARGET_PREMIUM_LABEL} {TARGET_MOVIE_ID} {human_time}"
                         )
                         trigger_ntfy(msg)
                     else:
