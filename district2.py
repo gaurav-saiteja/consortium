@@ -260,6 +260,7 @@ def booking_worker():
                 print(f"STATUS CODE: {lock_resp.status_code}")
                 print(f"RESPONSE BODY:\n{lock_resp.text}")
                 print(f"PAYLOAD SENT:\n{lock_payload}")
+                print(f"Headers:\n{headers_android}")
                 print("=============================================================\n")
             else:
                 print(f"\n[!] lock_resp is completely None. The request failed to send at all.")
