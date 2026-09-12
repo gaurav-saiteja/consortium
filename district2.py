@@ -253,9 +253,25 @@ def booking_worker():
             
             print(f"    -> [WORKER - {seat_label}] Locking seat...")
             lock_resp = make_request('POST', lock_url, headers=headers_android, json=lock_payload, proxy_override=thread_proxy)
-            new_temp_trans_id = lock_resp.json().get("tempTransId")
+            
+            # --- DEBUG BLOCK: DUMP THE TRUTH ---
+            if lock_resp is not None:
+                print(f"\n========== 🕵️ RAW SERVER RESPONSE FOR {seat_label} ==========")
+                print(f"STATUS CODE: {lock_resp.status_code}")
+                print(f"RESPONSE BODY:\n{lock_resp.text}")
+                print(f"PAYLOAD SENT:\n{lock_payload}")
+                print("=============================================================\n")
+            else:
+                print(f"\n[!] lock_resp is completely None. The request failed to send at all.")
+            # -----------------------------------
+
+            try:
+                new_temp_trans_id = lock_resp.json().get("tempTransId")
+            except Exception as e:
+                raise Exception(f"Failed to parse JSON. Raw text was: {lock_resp.text[:200]}")
+
             if not new_temp_trans_id:
-                raise Exception("Failed to lock seat!")
+                raise Exception(f"Failed to lock seat! No tempTransId found in response.")
 
             # --- STEP 2: CHECKOUT ---
             checkout_url = "https://www.district.in/gw/consumer/movies/v2/checkout?version=3&site_id=1&channel=web&child_site_id=1&platform=district&native_withdraw=1"
