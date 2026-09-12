@@ -6,12 +6,28 @@ import os
 import subprocess
 from datetime import datetime, timedelta
 import random
+import threading
+import base64
 
 # --- CONFIGURATION ---
 DATES = ["2026-09-14"]
 THEATRE_ID = "1039848" #vimal 70mm
 TARGET_MOVIE_TITLE = "epic"
 SCREEN_LABEL = "64CH ATMOS"
+
+# --- AUTOBUIER CONFIGURATION ---
+TARGET_SEATS = ["H14", "H15", "J21", "J22"] # Add the specific seats you want here!
+
+DEVICE_ID = "e655d7074359cd97"
+USER_ID = "94001055"
+ACCESS_TOKEN = "1789212473111770172_711805081438907057_6d65d672fcf1c7b42f59237d40918f43fed620a9b53570ac642f9632198bb3b8"
+REFRESH_TOKEN = "1789212473111774137_6651234817425529245_e28196895d819bdaf4707d1d3d3da4edfec986017e5281c6114f9e3bee3c3dac"
+
+# The Cookie string for web endpoints (checkout & SDK token)
+COOKIE_STRING = f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN}; x-refresh-token={REFRESH_TOKEN};"
+
+# Thread-safe tracking to prevent double-buying
+IN_PROGRESS_SEATS = set()
 
 STATE_FILE = "district_seat_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -194,10 +210,12 @@ def fetch_sessions():
                 
             # Step 2: Dynamic ID matching via Title (Contains, Case-Insensitive)
             target_mid = None
+            target_content_id = None
             for movie in movies_meta:
                 movie_name = movie.get("name", "").lower()
                 if TARGET_MOVIE_TITLE.lower() in movie_name:
                     target_mid = movie.get("id")
+                    target_content_id = movie.get("contentId")
                     print(f"    -> Matched title '{movie.get('name')}' to ID: {target_mid}")
                     break
                     
@@ -213,7 +231,9 @@ def fetch_sessions():
                 if show.get("mid") == target_mid and show.get("premiumLabel") == SCREEN_LABEL:
                     sessions.append({
                         "sessionId": show.get("sid"),
-                        "showTime": show.get("showTime")
+                        "showTime": show.get("showTime"),
+                        "contentId": target_content_id,
+                        "areas": show.get("areas", [])
                     })
                     target_count += 1
                     
@@ -223,6 +243,108 @@ def fetch_sessions():
             print(f"    -> JSON Parse error for {date_str}: {e}")
             
     return sessions
+
+def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id):
+    """The dedicated thread to lock and purchase a specific seat."""
+    try:
+        print(f"\n[🚀 SNIPER THREAD - {seat_label}] Initiating checkout pipeline!")
+        session_id = session_info["sessionId"]
+        content_id = session_info["contentId"]
+        show_time_str = session_info["showTime"] + ":00.000Z"
+        
+        # Match price from session areas
+        ticket_price = 0
+        for area in session_info.get("areas", []):
+            if area.get("code") == seat_meta["areaCode"]:
+                ticket_price = area.get("price", 0)
+                break
+                
+        ticket_type = f"{session_id}_{seat_meta['areaDesc']}"
+
+        # --- STEP 1: SET SEAT (Locking) ---
+        lock_url = "https://api.edition.in/gw/consumer/movies/v2/set-seat?version=3&site_id=1&channel=ANDROIDAPPINSIDER&child_site_id=1&platform=district"
+        lock_payload = {
+            "cancelOld": False, "cinemaId": int(CINEMA_ID), "sessionId": session_id,
+            "providerId": 1896, "tempTransId": temp_trans_id, "ticketType": ticket_type,
+            "noOfTickets": 1, "freeSeating": False, "showDateTime": show_time_str,
+            "ticketPrice": ticket_price, "stateCode": "36", "ticketCount": 1, 
+            "totalTicketPrice": ticket_price, 
+            "areaNumber": [int(seat_meta["areaNum"])], 
+            "gridSeatRowId": [seat_meta["gridRowId"]],
+            "gridSeatNumber": [seat_meta["gridSeatNum"]],
+            "areaCategoryCode": [seat_meta["areaCode"]]
+        }
+        
+        headers_android = POST_HEADERS.copy()
+        headers_android.update({"X-Device-Id": DEVICE_ID, "X-Access-Token": ACCESS_TOKEN, "X-Refresh-Token": REFRESH_TOKEN})
+        
+        print(f"[🚀 SNIPER THREAD - {seat_label}] Locking seat...")
+        lock_resp = make_request('POST', lock_url, headers=headers_android, json=lock_payload)
+        new_temp_trans_id = lock_resp.json().get("tempTransId")
+        if not new_temp_trans_id:
+            raise Exception("Failed to lock seat!")
+
+        # --- STEP 2: CHECKOUT ---
+        checkout_url = "https://www.district.in/gw/consumer/movies/v2/checkout?version=3&site_id=1&channel=web&child_site_id=1&platform=district&native_withdraw=1"
+        checkout_payload = {
+            "contentId": content_id, "tempTransId": new_temp_trans_id,
+            "paymentDetails": [{"payment_method_id": "50", "payment_method_type": "upi_qr", "wallet_balance": "0.0", "wallet_id": "0"}]
+        }
+        headers_web = GET_HEADERS.copy()
+        headers_web.update({"Cookie": COOKIE_STRING, "Origin": "https://www.district.in", "Content-Type": "application/json; charset=utf-8"})
+        
+        print(f"[🚀 SNIPER THREAD - {seat_label}] Generating Order ID...")
+        checkout_resp = make_request('POST', checkout_url, headers=headers_web, json=checkout_payload)
+        checkout_data = checkout_resp.json()
+        order_id = checkout_data.get("ORDER_ID")
+        pg_resp = checkout_data.get("pgResponse", {})
+        grand_total = pg_resp.get("grandTotal")
+        pay_hash = pg_resp.get("hash")
+
+        # --- STEP 3: GET SDK TOKEN ---
+        print(f"[🚀 SNIPER THREAD - {seat_label}] Fetching SDK Token...")
+        token_url = "https://www.district.in/gw/payments/in/get-sdk-token?version=3&site_id=1&channel=web&child_site_id=1&platform=district"
+        token_resp = make_request('POST', token_url, headers=headers_web)
+        sdk_token = token_resp.json().get("token")
+
+        # --- STEP 4: MAKE PAYMENT (QR CODE) ---
+        print(f"[🚀 SNIPER THREAD - {seat_label}] Generating UPI QR Code...")
+        pay_url = "https://zpay.zomato.com/v2/sdk/make_payment"
+        pay_payload = (
+            f"host_redirect_url=https%3A%2F%2Fwww.district.in%2Fmovies%2Forder%2F{order_id}&"
+            f"service_type=ED_MOVIES&user_id={USER_ID}&order_type=ED_MOVIES&order_id={order_id}&"
+            f"country_id=1&payment_method_id=50&payment_method_type=upi_qr&amount={grand_total}&"
+            f"payments_hash={pay_hash}&phone=9247191127&isMobileView=1"
+        )
+        pay_headers = {
+            "Host": "zpay.zomato.com", "X-Pas-Token": sdk_token, "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": GET_HEADERS["User-Agent"], "Origin": "https://www.district.in"
+        }
+        
+        pay_resp = make_request('POST', pay_url, headers=pay_headers, data=pay_payload)
+        qr_b64 = pay_resp.json().get("response", {}).get("transaction", {}).get("qr_data", {}).get("image")
+        
+        if qr_b64:
+            # --- STEP 5: PUSH TO NTFY AS RAW IMAGE ---
+            print(f"[🚀 SNIPER THREAD - {seat_label}] Success! Sending QR to phone...")
+            clean_b64 = qr_b64.replace("\\", "")
+            image_bytes = base64.b64decode(clean_b64)
+            
+            requests.post(
+                "https://ntfy.sh/dolby_unblock",
+                data=image_bytes,
+                headers={
+                    "Title": f"{seat_meta['areaDesc']} - {seat_label} locked.",
+                    "Priority": "urgent"
+                },
+                timeout=10
+            )
+        else:
+            print(f"[🚀 SNIPER THREAD - {seat_label}] Failed to extract QR Code.")
+            
+    except Exception as e:
+        print(f"[🚀 SNIPER THREAD - {seat_label}] ❌ Error in pipeline: {e}")
+        IN_PROGRESS_SEATS.discard(seat_label) # Free it up to try again next cycle!
 
 def fetch_seat_layout(session_id):
     url = "https://api.edition.in/gw/consumer/movies/v1/select-seat?version=3&site_id=1&channel=ANDROIDAPPINSIDER&child_site_id=1&platform=district"
@@ -244,33 +366,49 @@ def fetch_seat_layout(session_id):
         return {}
 
 def parse_layout(json_data):
-    """
-    Lean JSON-tree traversal algorithm. Extracts exactly what we need
-    without heavy Regex string processing.
-    """
+    """Parses layout and extracts rich metadata for target seats."""
     available_seats_by_row = {}
+    target_seat_metadata = {}
     
-    # Safely navigate the nested JSON structure
+    temp_trans_id = json_data.get("tempTransId")
     areas = json_data.get("seatLayout", {}).get("colAreas", {}).get("objArea", [])
     
     for area in areas:
+        area_desc = area.get("AreaDesc")
+        area_code = area.get("AreaCode")
+        area_num = area.get("AreaNum")
+        
         for row in area.get("objRow", []):
             row_letter = row.get("PhyRowId")
+            grid_row_id = row.get("GridRowId")
             if not row_letter: 
                 continue
                 
             available_in_row = []
             for seat in row.get("objSeat", []):
-                # Status "0" means Available on District platform
                 if seat.get("SeatStatus") == "0":
-                    available_in_row.append(str(seat.get("displaySeatNumber")))
+                    seat_num_str = str(seat.get("displaySeatNumber"))
+                    grid_seat_num = str(seat.get("GridSeatNum"))
                     
+                    available_in_row.append(seat_num_str)
+                    
+                    # If this is one of our sniper targets, save ALL its data!
+                    full_seat_name = f"{row_letter}{seat_num_str}"
+                    if full_seat_name in TARGET_SEATS:
+                        target_seat_metadata[full_seat_name] = {
+                            "areaDesc": area_desc,
+                            "areaCode": area_code,
+                            "areaNum": area_num,
+                            "gridRowId": grid_row_id,
+                            "gridSeatNum": grid_seat_num
+                        }
+                        
             if available_in_row:
                 if row_letter not in available_seats_by_row:
                     available_seats_by_row[row_letter] = []
                 available_seats_by_row[row_letter].extend(available_in_row)
                 
-    return available_seats_by_row
+    return available_seats_by_row, target_seat_metadata, temp_trans_id
 
 def main():
     start_time = time.time()
@@ -324,9 +462,22 @@ def main():
                 print("    -> Error: Failed to retrieve or parse seat layout.")
                 continue
                 
-            current_seats = parse_layout(raw_layout_json)
+            current_seats, target_metadata, temp_trans_id = parse_layout(raw_layout_json)
             current_total = sum(len(seats) for seats in current_seats.values())
             print(f"    -> Parse successful. Current Available Seats: {current_total}")
+            
+            # --- FIRE SNIPER THREADS ---
+            for target_seat, meta in target_metadata.items():
+                if target_seat not in IN_PROGRESS_SEATS:
+                    print(f"    -> 🎯 TARGET SEAT AVAILABLE: {target_seat}! Spawning checkout thread...")
+                    IN_PROGRESS_SEATS.add(target_seat)
+                    # Spawn and detach the thread!
+                    t = threading.Thread(
+                        target=sniper_checkout_pipeline, 
+                        args=(target_seat, meta, session, temp_trans_id),
+                        daemon=True
+                    )
+                    t.start()
             
             if s_id not in state:
                 state[s_id] = {"showTime": s_time, "total": 0, "rows": {}}
