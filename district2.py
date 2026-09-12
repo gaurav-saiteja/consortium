@@ -558,7 +558,10 @@ def main():
     print("==================================================")
     print("🚀 STARTING DISTRICT SEAT SCRAPER (PROACTIVE SNIPER)")
     print("==================================================")
-
+    # Start the single, dedicated booking worker thread in the background
+    worker_thread = threading.Thread(target=booking_worker, daemon=True)
+    worker_thread.start()
+    print("[CONFIG] Dedicated booking worker has been started.")
     state = load_state()
     is_first_run = len(state) == 0
     if is_first_run:
