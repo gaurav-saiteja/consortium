@@ -8,13 +8,14 @@ from datetime import datetime, timedelta
 import random
 import threading
 import base64
+import queue
 
 # --- CONFIGURATION ---
 DATES = ["2026-09-14"]
 THEATRE_ID = "1039848" #vimal 70mm
 TARGET_MOVIE_TITLE = "epic"
 SCREEN_LABEL = "64CH ATMOS"
-
+BOOKING_QUEUE = queue.Queue()
 # --- AUTOBUIER CONFIGURATION ---
 TARGET_SEATS = ["H14", "H15", "J21", "J22"] # Add the specific seats you want here!
 
@@ -200,6 +201,128 @@ def make_request(method, url, max_retries=3, proxy_override=None, **kwargs):
                 time.sleep(3)
                 continue
     return None
+
+def booking_worker():
+    """
+    A single, dedicated worker thread that pulls seats from a queue 
+    and processes them one by one to avoid rate-limiting.
+    """
+    while True:
+        # This line will wait patiently until a seat is added to the queue
+        job = BOOKING_QUEUE.get()
+        
+        seat_label = job["seat_label"]
+        seat_meta = job["seat_meta"]
+        session_info = job["session_info"]
+        temp_trans_id = job["temp_trans_id"]
+
+        try:
+            # Pick a random dedicated proxy for this specific job!
+            thread_proxy = random.choice(SNIPER_PROXIES) if SNIPER_PROXIES else None
+            
+            print(f"\n[✅ WORKER] Picking up seat '{seat_label}'. Initiating checkout.")
+            session_id = session_info["sessionId"]
+            content_id = session_info["contentId"]
+            show_time_str = session_info["showTime"] + ":00.000Z"
+            
+            # Match price from session areas
+            ticket_price = 0
+            for area in session_info.get("areas", []):
+                if area.get("code") == seat_meta["areaCode"]:
+                    ticket_price = area.get("price", 0)
+                    break
+                    
+            ticket_type = f"{session_id}_{seat_meta['areaDesc']}"
+
+            # --- STEP 1: SET SEAT (Locking) ---
+            lock_url = "https://api.edition.in/gw/consumer/movies/v2/set-seat?version=3&site_id=1&channel=ANDROIDAPPINSIDER&child_site_id=1&platform=district"
+            lock_payload = {
+                "cancelOld": False, "cinemaId": int(CINEMA_ID), "sessionId": session_id,
+                "providerId": 1896, "tempTransId": temp_trans_id, "ticketType": ticket_type,
+                "noOfTickets": 1, "freeSeating": False, "showDateTime": show_time_str,
+                "ticketPrice": ticket_price, "stateCode": "36", "ticketCount": 1, 
+                "totalTicketPrice": ticket_price, 
+                "areaNumber": [int(seat_meta["areaNum"])], 
+                "gridSeatRowId": [seat_meta["gridRowId"]],
+                "gridSeatNumber": [seat_meta["gridSeatNum"]],
+                "areaCategoryCode": [seat_meta["areaCode"]]
+            }
+            
+            headers_android = POST_HEADERS.copy()
+            headers_android.update({"X-Device-Id": DEVICE_ID, "X-Access-Token": ACCESS_TOKEN, "X-Refresh-Token": REFRESH_TOKEN})
+            
+            print(f"    -> [WORKER - {seat_label}] Locking seat...")
+            lock_resp = make_request('POST', lock_url, headers=headers_android, json=lock_payload, proxy_override=thread_proxy)
+            new_temp_trans_id = lock_resp.json().get("tempTransId")
+            if not new_temp_trans_id:
+                raise Exception("Failed to lock seat!")
+
+            # --- STEP 2: CHECKOUT ---
+            checkout_url = "https://www.district.in/gw/consumer/movies/v2/checkout?version=3&site_id=1&channel=web&child_site_id=1&platform=district&native_withdraw=1"
+            checkout_payload = {
+                "contentId": content_id, "tempTransId": new_temp_trans_id,
+                "paymentDetails": [{"payment_method_id": "50", "payment_method_type": "upi_qr", "wallet_balance": "0.0", "wallet_id": "0"}]
+            }
+            headers_web = GET_HEADERS.copy()
+            headers_web.update({"Cookie": COOKIE_STRING, "Origin": "https://www.district.in", "Content-Type": "application/json; charset=utf-8"})
+            
+            print(f"    -> [WORKER - {seat_label}] Generating Order ID...")
+            checkout_resp = make_request('POST', checkout_url, headers=headers_web, json=checkout_payload, proxy_override=thread_proxy)
+            checkout_data = checkout_resp.json()
+            order_id = checkout_data.get("ORDER_ID")
+            pg_resp = checkout_data.get("pgResponse", {})
+            grand_total = pg_resp.get("grandTotal")
+            pay_hash = pg_resp.get("hash")
+
+            # --- STEP 3: GET SDK TOKEN ---
+            print(f"    -> [WORKER - {seat_label}] Fetching SDK Token...")
+            token_url = "https://www.district.in/gw/payments/in/get-sdk-token?version=3&site_id=1&channel=web&child_site_id=1&platform=district"
+            token_resp = make_request('POST', token_url, headers=headers_web, proxy_override=thread_proxy)
+            sdk_token = token_resp.json().get("token")
+
+            # --- STEP 4: MAKE PAYMENT (QR CODE) ---
+            print(f"    -> [WORKER - {seat_label}] Generating UPI QR Code...")
+            pay_url = "https://zpay.zomato.com/v2/sdk/make_payment"
+            pay_payload = (
+                f"host_redirect_url=https%3A%2F%2Fwww.district.in%2Fmovies%2Forder%2F{order_id}&"
+                f"service_type=ED_MOVIES&user_id={USER_ID}&order_type=ED_MOVIES&order_id={order_id}&"
+                f"country_id=1&payment_method_id=50&payment_method_type=upi_qr&amount={grand_total}&"
+                f"payments_hash={pay_hash}&phone=9247191127&isMobileView=1"
+            )
+            pay_headers = {
+                "Host": "zpay.zomato.com", "X-Pas-Token": sdk_token, "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": GET_HEADERS["User-Agent"], "Origin": "https://www.district.in"
+            }
+            
+            pay_resp = make_request('POST', pay_url, headers=pay_headers, data=pay_payload, proxy_override=thread_proxy)
+            qr_b64 = pay_resp.json().get("response", {}).get("transaction", {}).get("qr_data", {}).get("image")
+            
+            if qr_b64:
+                # --- STEP 5: PUSH TO NTFY AS RAW IMAGE ---
+                print(f"    -> [WORKER - {seat_label}] Success! Sending QR to phone...")
+                clean_b64 = qr_b64.replace("\\", "")
+                image_bytes = base64.b64decode(clean_b64)
+                
+                requests.post(
+                    "https://ntfy.sh/dolby_unblock",
+                    data=image_bytes,
+                    headers={
+                        "Title": f"🎫 SEAT LOCKED: {seat_meta['areaDesc']} - {seat_label}",
+                        "Tags": "ticket,moneybag",
+                        "Priority": "urgent",
+                        "Filename": "pay_qr.png"
+                    },
+                    timeout=10
+                )
+            else:
+                print(f"    -> [WORKER - {seat_label}] ❌ Failed to extract QR Code.")
+                
+        except Exception as e:
+            print(f"    -> [WORKER - {seat_label}] ❌ Error in pipeline: {e}")
+            IN_PROGRESS_SEATS.discard(seat_label) # Free it up to try again next cycle!
+            
+        # Mark the task as done, so the queue knows it can move on.
+        BOOKING_QUEUE.task_done()
 
 def fetch_sessions():
     sessions = []
@@ -488,15 +611,17 @@ def main():
             # --- FIRE SNIPER THREADS ---
             for target_seat, meta in target_metadata.items():
                 if target_seat not in IN_PROGRESS_SEATS:
-                    print(f"    -> 🎯 TARGET SEAT AVAILABLE: {target_seat}! Spawning checkout thread...")
+                    print(f"    -> 🎯 TARGET SEAT AVAILABLE: {target_seat}! Adding to booking queue.")
                     IN_PROGRESS_SEATS.add(target_seat)
-                    # Spawn and detach the thread!
-                    t = threading.Thread(
-                        target=sniper_checkout_pipeline, 
-                        args=(target_seat, meta, session, temp_trans_id),
-                        daemon=True
-                    )
-                    t.start()
+                    
+                    # Create a job package with all the data the worker needs
+                    job = {
+                        "seat_label": target_seat,
+                        "seat_meta": meta,
+                        "session_info": session,
+                        "temp_trans_id": temp_trans_id
+                    }
+                    BOOKING_QUEUE.put(job)
             
             if s_id not in state:
                 state[s_id] = {"showTime": s_time, "total": 0, "rows": {}}
