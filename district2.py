@@ -264,7 +264,7 @@ def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id)
         # --- STEP 1: SET SEAT (Locking) ---
         lock_url = "https://api.edition.in/gw/consumer/movies/v2/set-seat?version=3&site_id=1&channel=ANDROIDAPPINSIDER&child_site_id=1&platform=district"
         lock_payload = {
-            "cancelOld": False, "cinemaId": int(CINEMA_ID), "sessionId": session_id,
+            "cancelOld": False, "cinemaId": int(THEATRE_ID), "sessionId": session_id,
             "providerId": 1896, "tempTransId": temp_trans_id, "ticketType": ticket_type,
             "noOfTickets": 1, "freeSeating": False, "showDateTime": show_time_str,
             "ticketPrice": ticket_price, "stateCode": "36", "ticketCount": 1, 
