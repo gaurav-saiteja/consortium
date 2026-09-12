@@ -360,7 +360,7 @@ def main():
                         )
                         trigger_ntfy(msg)
                     else:
-                        print(f"    -> 🟡 Less than 3 seats unblocked ({newly_unblocked_count}). Skipping notification (Spam Protection).")
+                        print(f"    -> 🟡 Less than 3 seats unblocked ({newly_unblocked_count}). Skipping notification.")
                 
                 state[s_id]["rows"] = current_seats
                 state[s_id]["total"] = current_total
