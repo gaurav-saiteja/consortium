@@ -41,6 +41,20 @@ PROXIES = {
     "https": "socks5://127.0.0.1:40000"
 }
 
+RAW_PROXY_LIST = os.environ.get("PROXY_LIST", "")
+SNIPER_PROXIES = []
+
+for line in RAW_PROXY_LIST.strip().split("\n"):
+    line = line.strip()
+    if line:
+        parts = line.split(":")
+        if len(parts) == 4:
+            ip, port, user, pwd = parts
+            uri = f"http://{user}:{pwd}@{ip}:{port}"
+            SNIPER_PROXIES.append({"http": uri, "https": uri})
+
+print(f"[CONFIG] Loaded {len(SNIPER_PROXIES)} dedicated proxies for Sniper Threads.")
+
 # 1. Headers for district.in (Web Spoofing for GET)
 GET_HEADERS = {
     "Host": "www.district.in",
@@ -152,9 +166,10 @@ def toggle_warp():
         time.sleep(3) 
         USE_WARP = True
 
-def make_request(method, url, max_retries=3, **kwargs):
+def make_request(method, url, max_retries=3, proxy_override=None, **kwargs):
     for attempt in range(1, max_retries + 1):
-        current_proxies = PROXIES if USE_WARP else None
+        # If a thread provides its own proxy, use it! Otherwise, fallback to the main WARP logic.
+        current_proxies = proxy_override if proxy_override else (PROXIES if USE_WARP else None)
 
         if 'headers' in kwargs:
             headers = kwargs['headers'].copy()
@@ -167,12 +182,15 @@ def make_request(method, url, max_retries=3, **kwargs):
             else:
                 resp = cffi_requests.post(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
             
-            print(f"    -> Status: {resp.status_code} (Using WARP: {USE_WARP})")
-            
             if resp.status_code in [429, 403]:
                 print(f"    -> ⚠️ Rate limited ({resp.status_code}) on attempt {attempt}/{max_retries}.")
                 if attempt < max_retries:
-                    toggle_warp()
+                    # ONLY toggle WARP if this is the main polling thread.
+                    if not proxy_override:
+                        toggle_warp()
+                    else:
+                        # Sniper threads just pause for a second and try their private proxy again
+                        time.sleep(1) 
                     continue
             return resp
             
@@ -247,6 +265,7 @@ def fetch_sessions():
 def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id):
     """The dedicated thread to lock and purchase a specific seat."""
     try:
+        thread_proxy = random.choice(SNIPER_PROXIES) if SNIPER_PROXIES else None
         print(f"\n[🚀 SNIPER THREAD - {seat_label}] Initiating checkout pipeline!")
         session_id = session_info["sessionId"]
         content_id = session_info["contentId"]
@@ -279,7 +298,7 @@ def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id)
         headers_android.update({"X-Device-Id": DEVICE_ID, "X-Access-Token": ACCESS_TOKEN, "X-Refresh-Token": REFRESH_TOKEN})
         
         print(f"[🚀 SNIPER THREAD - {seat_label}] Locking seat...")
-        lock_resp = make_request('POST', lock_url, headers=headers_android, json=lock_payload)
+        lock_resp = make_request('POST', lock_url, headers=headers_android, json=lock_payload, proxy_override=thread_proxy)
         new_temp_trans_id = lock_resp.json().get("tempTransId")
         if not new_temp_trans_id:
             raise Exception("Failed to lock seat!")
@@ -294,7 +313,7 @@ def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id)
         headers_web.update({"Cookie": COOKIE_STRING, "Origin": "https://www.district.in", "Content-Type": "application/json; charset=utf-8"})
         
         print(f"[🚀 SNIPER THREAD - {seat_label}] Generating Order ID...")
-        checkout_resp = make_request('POST', checkout_url, headers=headers_web, json=checkout_payload)
+        checkout_resp = make_request('POST', checkout_url, headers=headers_web, json=checkout_payload, proxy_override=thread_proxy)
         checkout_data = checkout_resp.json()
         order_id = checkout_data.get("ORDER_ID")
         pg_resp = checkout_data.get("pgResponse", {})
@@ -304,7 +323,7 @@ def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id)
         # --- STEP 3: GET SDK TOKEN ---
         print(f"[🚀 SNIPER THREAD - {seat_label}] Fetching SDK Token...")
         token_url = "https://www.district.in/gw/payments/in/get-sdk-token?version=3&site_id=1&channel=web&child_site_id=1&platform=district"
-        token_resp = make_request('POST', token_url, headers=headers_web)
+        token_resp = make_request('POST', token_url, headers=headers_web, proxy_override=thread_proxy)
         sdk_token = token_resp.json().get("token")
 
         # --- STEP 4: MAKE PAYMENT (QR CODE) ---
@@ -321,7 +340,7 @@ def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id)
             "User-Agent": GET_HEADERS["User-Agent"], "Origin": "https://www.district.in"
         }
         
-        pay_resp = make_request('POST', pay_url, headers=pay_headers, data=pay_payload)
+        pay_resp = make_request('POST', pay_url, headers=pay_headers, data=pay_payload, proxy_override=thread_proxy)
         qr_b64 = pay_resp.json().get("response", {}).get("transaction", {}).get("qr_data", {}).get("image")
         
         if qr_b64:
