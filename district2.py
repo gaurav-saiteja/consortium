@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import random
 
 # --- CONFIGURATION ---
-DATES = ["2026-09-24"]
+DATES = ["2026-09-14"]
 THEATRE_ID = "1039848" #vimal 70mm
 TARGET_MOVIE_TITLE = "epic"
 SCREEN_LABEL = "64CH ATMOS"
