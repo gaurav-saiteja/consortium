@@ -9,9 +9,9 @@ import random
 
 # --- CONFIGURATION ---
 DATES = ["2026-09-11"]
-CINEMA_ID = "1039848"
-TARGET_MOVIE_ID = "OBCISK" # E.g., 'Epic' from the sample response
-TARGET_PREMIUM_LABEL = "64CH ATMOS"
+THEATRE_ID = "1039848" #vimal 70mm
+TARGET_MOVIE_TITLE = "epic"
+SCREEN_LABEL = "64CH ATMOS"
 
 STATE_FILE = "district_seat_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -170,13 +170,12 @@ def make_request(method, url, max_retries=3, **kwargs):
 def fetch_sessions():
     sessions = []
     for date_str in DATES:
-        time.sleep(1)
         print(f"\n[NETWORK] Fetching District sessions for Date: {date_str}...")
         
         url = (
             f"https://www.district.in/gw/consumer/movies/v3/cinema?"
             f"meta=1&reqData=1&version=3&site_id=1&channel=web&child_site_id=1"
-            f"&platform=district&cinemaId={CINEMA_ID}&date={date_str}"
+            f"&platform=district&cinemaId={THEATRE_ID}&date={date_str}"
         )
         
         resp = make_request('GET', url, headers=GET_HEADERS)
@@ -186,13 +185,32 @@ def fetch_sessions():
             
         try:
             data = resp.json()
-            all_sessions = data.get("pageData", {}).get("sessions", [])
-            print(f"    -> Found {len(all_sessions)} total shows. Filtering for target movie and format...")
             
+            # Step 1: Safely check if ANY movies are listed yet
+            movies_meta = data.get("meta", {}).get("movies", [])
+            if not movies_meta:
+                print(f"    -> 0 shows listed currently for {date_str}.")
+                continue
+                
+            # Step 2: Dynamic ID matching via Title (Contains, Case-Insensitive)
+            target_mid = None
+            for movie in movies_meta:
+                movie_name = movie.get("name", "").lower()
+                if TARGET_MOVIE_TITLE.lower() in movie_name:
+                    target_mid = movie.get("id")
+                    print(f"    -> Matched title '{movie.get('name')}' to ID: {target_mid}")
+                    break
+                    
+            if not target_mid:
+                print(f"    -> Target movie containing '{TARGET_MOVIE_TITLE}' not found in listed movies for {date_str}.")
+                continue
+                
+            # Step 3: Filter the sessions for the dynamically matched ID and Format
+            all_sessions = data.get("pageData", {}).get("sessions", [])
             target_count = 0
+            
             for show in all_sessions:
-                # Filter precisely by Movie ID and Premium format type
-                if show.get("mid") == TARGET_MOVIE_ID and show.get("premiumLabel") == TARGET_PREMIUM_LABEL:
+                if show.get("mid") == target_mid and show.get("premiumLabel") == SCREEN_LABEL:
                     sessions.append({
                         "sessionId": show.get("sid"),
                         "showTime": show.get("showTime")
@@ -209,7 +227,7 @@ def fetch_sessions():
 def fetch_seat_layout(session_id):
     url = "https://api.edition.in/gw/consumer/movies/v1/select-seat?version=3&site_id=1&channel=ANDROIDAPPINSIDER&child_site_id=1&platform=district"
     payload = {
-        "cinemaId": CINEMA_ID,
+        "cinemaId": THEATRE_ID,
         "sessionId": session_id
     }
     
@@ -258,17 +276,7 @@ def main():
     start_time = time.time()
     
     print("==================================================")
-    print("🚀 STARTING DISTRICT SEAT SCRAPER")
-    print("==================================================")
-    
-    target_sessions = fetch_sessions()
-    total_sessions = len(target_sessions)
-    
-    if total_sessions == 0:
-        print("No valid target sessions found. Exiting.")
-        return
-
-    print(f"\n✅ Found {total_sessions} matching sessions to monitor.")
+    print("🚀 STARTING DISTRICT SEAT SCRAPER (PROACTIVE SNIPER)")
     print("==================================================")
 
     state = load_state()
@@ -284,6 +292,19 @@ def main():
         print(f"\n==================================================")
         print(f"🔄 STARTING POLLING CYCLE {cycle_count}")
         print(f"==================================================")
+        
+        # Fetch dynamically every cycle. 
+        # If date 1 drops, it tracks it. Next cycle it still checks date 2 for new drops!
+        target_sessions = fetch_sessions()
+        total_sessions = len(target_sessions)
+        
+        if total_sessions == 0:
+            print(f"\n[!] No sessions live yet. Waiting 5 seconds...")
+            time.sleep(5)
+            cycle_count += 1
+            continue
+            
+        print(f"\n✅ Tracking {total_sessions} live matching sessions.")
         
         state = load_state()
         deltas = {} 
@@ -335,7 +356,7 @@ def main():
 
                         msg = (
                             f"[{newly_unblocked_count}] {rows_str} unblocked\n"
-                            f"{TARGET_PREMIUM_LABEL} {TARGET_MOVIE_ID} {human_time}"
+                            f"{SCREEN_LABEL} {TARGET_MOVIE_ID} {human_time}"
                         )
                         trigger_ntfy(msg)
                     else:
