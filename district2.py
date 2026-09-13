@@ -309,7 +309,7 @@ def booking_worker():
             minified_checkout_payload = json.dumps(checkout_payload, separators=(',', ':'))
             
             # 2. Use data= instead of json= to prevent the request library from reformatting it
-            checkout_resp = make_request('POST', checkout_url, headers=CHECKOUT_HEADERS, data=minified_checkout_payload, proxy_override=thread_proxy)
+            checkout_resp = make_request('POST', checkout_url, headers=CHECKOUT_HEADERS, data=minified_checkout_payload)
             print(CHECKOUT_HEADERS)
             print(checkout_payload)
             print(checkout_resp.status_code)
