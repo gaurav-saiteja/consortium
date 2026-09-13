@@ -17,7 +17,7 @@ TARGET_MOVIE_TITLE = "epic"
 SCREEN_LABEL = "64CH ATMOS"
 BOOKING_QUEUE = queue.Queue()
 # --- AUTOBUIER CONFIGURATION ---
-TARGET_SEATS = ["Q14"] # Add the specific seats you want here!
+TARGET_SEATS = ["Q16"] # Add the specific seats you want here!
 
 DEVICE_ID = "e655d7074359cd97"
 USER_ID = "94001055"
@@ -289,7 +289,6 @@ def booking_worker():
 
             CHECKOUT_HEADERS = {
                 "Host": "www.district.in",
-                "Api_source": "district",
                 "Cookie": f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN};",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
                 "Accept": "*/*",
@@ -305,7 +304,12 @@ def booking_worker():
             }
             
             print(f"    -> [WORKER - {seat_label}] Generating Order ID...")
-            checkout_resp = make_request('POST', checkout_url, headers=CHECKOUT_HEADERS, json=checkout_payload, proxy_override=thread_proxy)
+            
+            # 1. Minify the payload to remove all spaces, matching the actual client exactly
+            minified_checkout_payload = json.dumps(checkout_payload, separators=(',', ':'))
+            
+            # 2. Use data= instead of json= to prevent the request library from reformatting it
+            checkout_resp = make_request('POST', checkout_url, headers=CHECKOUT_HEADERS, data=minified_checkout_payload, proxy_override=thread_proxy)
             print(CHECKOUT_HEADERS)
             print(checkout_payload)
             print(checkout_resp.status_code)
