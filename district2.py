@@ -175,8 +175,7 @@ def make_request(method, url, max_retries=3, proxy_override=None, **kwargs):
         if 'headers' in kwargs:
             headers = kwargs['headers'].copy()
             if "api.edition.in" not in url:
-                if "select-seat" in url or "consumer/movies/v3/cinema?meta" in url:
-                    headers['X-Guest-Token'] = str(random.randint(1000000, 9999999))
+                headers['X-Guest-Token'] = str(random.randint(1000000, 9999999))
             kwargs['headers'] = headers
 
         try:
@@ -523,9 +522,15 @@ def fetch_seat_layout(session_id):
         "cinemaId": THEATRE_ID,
         "sessionId": session_id
     }
-    
+    TEMP_HEADERS = {
+        "Host": "api.edition.in",
+        "Content-Type": "application/json; charset=utf-8",
+        "User-Agent": "com.application.zomato.district/1000026600 (Linux; U; Android 13; en_US; sdk_gphone64_x86_64; Build/TE1A.240213.009; Cronet/113.0.5672.51)",
+        "Accept-Encoding": "gzip, deflate, br",
+        "X-Guest-Token" : random.randint(1000000, 9999999)
+    }
     print(f"    -> [POST] (Session: {session_id})")
-    resp = make_request('POST', url, headers=POST_HEADERS, json=payload)
+    resp = make_request('POST', url, headers=TEMP_HEADERS, json=payload)
     print(resp.text)
     print(resp.status_code)
     if not resp or resp.status_code != 200:
