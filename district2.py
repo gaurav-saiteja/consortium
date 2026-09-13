@@ -671,7 +671,7 @@ def main():
 
                         msg = (
                             f"[{newly_unblocked_count}] {rows_str} unblocked\n"
-                            f"{SCREEN_LABEL} {TARGET_MOVIE_ID} {human_time}"
+                            f"{SCREEN_LABEL} {TARGET_MOVIE_TITLE} {human_time}"
                         )
                         trigger_ntfy(msg)
                     else:
