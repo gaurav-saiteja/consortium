@@ -291,6 +291,9 @@ def booking_worker():
             
             print(f"    -> [WORKER - {seat_label}] Generating Order ID...")
             checkout_resp = make_request('POST', checkout_url, headers=headers_web, json=checkout_payload, proxy_override=thread_proxy)
+            print(checkout_payload)
+            print(checkout_resp.status_code)
+            print(checkout_resp.text)
             checkout_data = checkout_resp.json()
             order_id = checkout_data.get("ORDER_ID")
             pg_resp = checkout_data.get("pgResponse", {})
