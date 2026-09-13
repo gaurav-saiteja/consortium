@@ -286,11 +286,26 @@ def booking_worker():
                 "contentId": content_id, "tempTransId": new_temp_trans_id,
                 "paymentDetails": [{"payment_method_id": "50", "payment_method_type": "upi_qr", "wallet_balance": "0.0", "wallet_id": "0"}]
             }
-            headers_web = GET_HEADERS.copy()
-            headers_web.update({"Cookie": COOKIE_STRING, "Origin": "https://www.district.in", "Content-Type": "application/json; charset=utf-8"})
+
+            CHECKOUT_HEADERS = {
+                "Host": "www.district.in",
+                "Api_source": "district",
+                "Cookie": f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN}; x-refresh-token={REFRESH_TOKEN};"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+                "Accept": "*/*",
+                "Origin": "https://www.district.in",
+                "Sec-Fetch-Site": "same-origin",
+                "Sec-Fetch-Mode": "cors",
+                "Content-Type": "application/json; charset=utf-8",
+                "Sec-Fetch-Dest": "empty",
+                "Referer": "https://www.district.in",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Priority": "u=1, i"
+            }
             
             print(f"    -> [WORKER - {seat_label}] Generating Order ID...")
-            checkout_resp = make_request('POST', checkout_url, headers=headers_web, json=checkout_payload, proxy_override=thread_proxy)
+            checkout_resp = make_request('POST', checkout_url, headers=CHECKOUT_HEADERS, json=checkout_payload, proxy_override=thread_proxy)
             print(checkout_payload)
             print(checkout_resp.status_code)
             print(checkout_resp.text)
