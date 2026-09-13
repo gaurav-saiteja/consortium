@@ -17,7 +17,7 @@ TARGET_MOVIE_TITLE = "epic"
 SCREEN_LABEL = "64CH ATMOS"
 BOOKING_QUEUE = queue.Queue()
 # --- AUTOBUIER CONFIGURATION ---
-TARGET_SEATS = ["Q15"] # Add the specific seats you want here!
+TARGET_SEATS = ["Q14"] # Add the specific seats you want here!
 
 DEVICE_ID = "e655d7074359cd97"
 USER_ID = "94001055"
