@@ -526,7 +526,8 @@ def fetch_seat_layout(session_id):
     
     print(f"    -> [POST] (Session: {session_id})")
     resp = make_request('POST', url, headers=POST_HEADERS, json=payload)
-    
+    print(resp.text)
+    print(response.status_code)
     if not resp or resp.status_code != 200:
         return {}
         
