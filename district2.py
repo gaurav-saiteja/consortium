@@ -174,7 +174,9 @@ def make_request(method, url, max_retries=3, proxy_override=None, **kwargs):
 
         if 'headers' in kwargs:
             headers = kwargs['headers'].copy()
-            headers['X-Guest-Token'] = str(random.randint(1000000, 9999999))
+            # FIX: Only inject X-Guest-Token for unauthenticated web endpoint requests
+            if "api.edition.in" not in url:
+                headers['X-Guest-Token'] = str(random.randint(1000000, 9999999))
             kwargs['headers'] = headers
 
         try:
@@ -229,7 +231,8 @@ def booking_worker():
             ticket_price = 0
             for area in session_info.get("areas", []):
                 if area.get("code") == seat_meta["areaCode"]:
-                    ticket_price = area.get("price", 0)
+                    # FIX 1: Explicitly cast to integer
+                    ticket_price = int(area.get("price", 0))
                     break
                     
             ticket_type = f"{session_id}_{seat_meta['areaDesc']}"
@@ -251,8 +254,12 @@ def booking_worker():
             headers_android = POST_HEADERS.copy()
             headers_android.update({"X-Device-Id": DEVICE_ID, "X-Access-Token": ACCESS_TOKEN, "X-Refresh-Token": REFRESH_TOKEN})
             
+            # FIX 2: Minify the payload perfectly with zero spaces
+            minified_payload = json.dumps(lock_payload, separators=(',', ':'))
+            
             print(f"    -> [WORKER - {seat_label}] Locking seat...")
-            lock_resp = make_request('POST', lock_url, headers=headers_android, json=lock_payload, proxy_override=thread_proxy)
+            # FIX 3: Send using `data=minified_payload` instead of `json=lock_payload`
+            lock_resp = make_request('POST', lock_url, headers=headers_android, data=minified_payload, proxy_override=thread_proxy)
             
             # --- DEBUG BLOCK: DUMP THE TRUTH ---
             if lock_resp is not None:
@@ -415,7 +422,8 @@ def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id)
         ticket_price = 0
         for area in session_info.get("areas", []):
             if area.get("code") == seat_meta["areaCode"]:
-                ticket_price = area.get("price", 0)
+                # FIX: Explicitly cast to integer
+                ticket_price = int(area.get("price", 0))
                 break
                 
         ticket_type = f"{session_id}_{seat_meta['areaDesc']}"
@@ -437,8 +445,12 @@ def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id)
         headers_android = POST_HEADERS.copy()
         headers_android.update({"X-Device-Id": DEVICE_ID, "X-Access-Token": ACCESS_TOKEN, "X-Refresh-Token": REFRESH_TOKEN})
         
+        # FIX: Minify the payload perfectly with zero spaces
+        minified_payload = json.dumps(lock_payload, separators=(',', ':'))
+        
         print(f"[🚀 SNIPER THREAD - {seat_label}] Locking seat...")
-        lock_resp = make_request('POST', lock_url, headers=headers_android, json=lock_payload, proxy_override=thread_proxy)
+        # FIX: Send using `data=minified_payload` instead of `json=lock_payload`
+        lock_resp = make_request('POST', lock_url, headers=headers_android, data=minified_payload, proxy_override=thread_proxy)
         new_temp_trans_id = lock_resp.json().get("tempTransId")
         if not new_temp_trans_id:
             raise Exception("Failed to lock seat!")
