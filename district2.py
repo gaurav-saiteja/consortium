@@ -290,7 +290,7 @@ def booking_worker():
             CHECKOUT_HEADERS = {
                 "Host": "www.district.in",
                 "Api_source": "district",
-                "Cookie": f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN}; x-refresh-token={REFRESH_TOKEN};"
+                "Cookie": f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN}; x-refresh-token={REFRESH_TOKEN};",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
                 "Accept": "*/*",
                 "Origin": "https://www.district.in",
