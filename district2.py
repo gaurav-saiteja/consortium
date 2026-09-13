@@ -290,7 +290,7 @@ def booking_worker():
             CHECKOUT_HEADERS = {
                 "Host": "www.district.in",
                 "Api_source": "district",
-                "Cookie": f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN}; x-refresh-token={REFRESH_TOKEN};",
+                "Cookie": f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN};",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
                 "Accept": "*/*",
                 "Origin": "https://www.district.in",
@@ -425,114 +425,6 @@ def fetch_sessions():
             print(f"    -> JSON Parse error for {date_str}: {e}")
             
     return sessions
-
-def sniper_checkout_pipeline(seat_label, seat_meta, session_info, temp_trans_id):
-    """The dedicated thread to lock and purchase a specific seat."""
-    try:
-        thread_proxy = random.choice(SNIPER_PROXIES) if SNIPER_PROXIES else None
-        print(f"\n[🚀 SNIPER THREAD - {seat_label}] Initiating checkout pipeline!")
-        session_id = session_info["sessionId"]
-        content_id = session_info["contentId"]
-        show_time_str = session_info["showTime"] + ":00.000Z"
-        
-        # Match price from session areas
-        ticket_price = 0
-        for area in session_info.get("areas", []):
-            if area.get("code") == seat_meta["areaCode"]:
-                # FIX: Explicitly cast to integer
-                ticket_price = int(area.get("price", 0))
-                break
-                
-        ticket_type = f"{session_id}_{seat_meta['areaDesc']}"
-
-        # --- STEP 1: SET SEAT (Locking) ---
-        lock_url = "https://api.edition.in/gw/consumer/movies/v2/set-seat?version=3&site_id=1&channel=ANDROIDAPPINSIDER&child_site_id=1&platform=district"
-        lock_payload = {
-            "cancelOld": False, "cinemaId": int(THEATRE_ID), "sessionId": session_id,
-            "providerId": 1896, "tempTransId": temp_trans_id, "ticketType": ticket_type,
-            "noOfTickets": 1, "freeSeating": False, "showDateTime": show_time_str,
-            "ticketPrice": ticket_price, "stateCode": "36", "ticketCount": 1, 
-            "totalTicketPrice": ticket_price, 
-            "areaNumber": [int(seat_meta["areaNum"])], 
-            "gridSeatRowId": [seat_meta["gridRowId"]],
-            "gridSeatNumber": [seat_meta["gridSeatNum"]],
-            "areaCategoryCode": [seat_meta["areaCode"]]
-        }
-        
-        headers_android = POST_HEADERS.copy()
-        headers_android.update({"X-Device-Id": DEVICE_ID, "X-Access-Token": ACCESS_TOKEN, "X-Refresh-Token": REFRESH_TOKEN})
-        
-        # FIX: Minify the payload perfectly with zero spaces
-        minified_payload = json.dumps(lock_payload, separators=(',', ':'))
-        
-        print(f"[🚀 SNIPER THREAD - {seat_label}] Locking seat...")
-        # FIX: Send using `data=minified_payload` instead of `json=lock_payload`
-        lock_resp = make_request('POST', lock_url, headers=headers_android, data=minified_payload, proxy_override=thread_proxy)
-        new_temp_trans_id = lock_resp.json().get("tempTransId")
-        if not new_temp_trans_id:
-            raise Exception("Failed to lock seat!")
-
-        # --- STEP 2: CHECKOUT ---
-        checkout_url = "https://www.district.in/gw/consumer/movies/v2/checkout?version=3&site_id=1&channel=web&child_site_id=1&platform=district&native_withdraw=1"
-        checkout_payload = {
-            "contentId": content_id, "tempTransId": new_temp_trans_id,
-            "paymentDetails": [{"payment_method_id": "50", "payment_method_type": "upi_qr", "wallet_balance": "0.0", "wallet_id": "0"}]
-        }
-        headers_web = GET_HEADERS.copy()
-        headers_web.update({"Cookie": COOKIE_STRING, "Origin": "https://www.district.in", "Content-Type": "application/json; charset=utf-8"})
-        
-        print(f"[🚀 SNIPER THREAD - {seat_label}] Generating Order ID...")
-        checkout_resp = make_request('POST', checkout_url, headers=headers_web, json=checkout_payload, proxy_override=thread_proxy)
-        checkout_data = checkout_resp.json()
-        order_id = checkout_data.get("ORDER_ID")
-        pg_resp = checkout_data.get("pgResponse", {})
-        grand_total = pg_resp.get("grandTotal")
-        pay_hash = pg_resp.get("hash")
-
-        # --- STEP 3: GET SDK TOKEN ---
-        print(f"[🚀 SNIPER THREAD - {seat_label}] Fetching SDK Token...")
-        token_url = "https://www.district.in/gw/payments/in/get-sdk-token?version=3&site_id=1&channel=web&child_site_id=1&platform=district"
-        token_resp = make_request('POST', token_url, headers=headers_web, proxy_override=thread_proxy)
-        sdk_token = token_resp.json().get("token")
-
-        # --- STEP 4: MAKE PAYMENT (QR CODE) ---
-        print(f"[🚀 SNIPER THREAD - {seat_label}] Generating UPI QR Code...")
-        pay_url = "https://zpay.zomato.com/v2/sdk/make_payment"
-        pay_payload = (
-            f"host_redirect_url=https%3A%2F%2Fwww.district.in%2Fmovies%2Forder%2F{order_id}&"
-            f"service_type=ED_MOVIES&user_id={USER_ID}&order_type=ED_MOVIES&order_id={order_id}&"
-            f"country_id=1&payment_method_id=50&payment_method_type=upi_qr&amount={grand_total}&"
-            f"payments_hash={pay_hash}&phone=9247191127&isMobileView=1"
-        )
-        pay_headers = {
-            "Host": "zpay.zomato.com", "X-Pas-Token": sdk_token, "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": GET_HEADERS["User-Agent"], "Origin": "https://www.district.in"
-        }
-        
-        pay_resp = make_request('POST', pay_url, headers=pay_headers, data=pay_payload, proxy_override=thread_proxy)
-        qr_b64 = pay_resp.json().get("response", {}).get("transaction", {}).get("qr_data", {}).get("image")
-        
-        if qr_b64:
-            # --- STEP 5: PUSH TO NTFY AS RAW IMAGE ---
-            print(f"[🚀 SNIPER THREAD - {seat_label}] Success! Sending QR to phone...")
-            clean_b64 = qr_b64.replace("\\", "")
-            image_bytes = base64.b64decode(clean_b64)
-            
-            requests.post(
-                "https://ntfy.sh/dolby_unblock",
-                data=image_bytes,
-                headers={
-                    "Title": f"{seat_meta['areaDesc']} - {seat_label} locked.",
-                    "Priority": "urgent"
-                },
-                timeout=10
-            )
-        else:
-            print(f"[🚀 SNIPER THREAD - {seat_label}] Failed to extract QR Code.")
-            
-    except Exception as e:
-        print(f"[🚀 SNIPER THREAD - {seat_label}] ❌ Error in pipeline: {e}")
-        IN_PROGRESS_SEATS.discard(seat_label) # Free it up to try again next cycle!
 
 def fetch_seat_layout(session_id):
     url = "https://api.edition.in/gw/consumer/movies/v1/select-seat?version=3&site_id=1&channel=ANDROIDAPPINSIDER&child_site_id=1&platform=district"
