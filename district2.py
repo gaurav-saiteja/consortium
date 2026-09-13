@@ -175,7 +175,7 @@ def make_request(method, url, max_retries=3, proxy_override=None, **kwargs):
         if 'headers' in kwargs:
             headers = kwargs['headers'].copy()
             # FIX: Only inject X-Guest-Token for unauthenticated web endpoint requests
-            if "api.edition.in" not in url:
+            if "select-seat" in url:
                 headers['X-Guest-Token'] = str(random.randint(1000000, 9999999))
             kwargs['headers'] = headers
 
