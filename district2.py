@@ -17,7 +17,7 @@ TARGET_MOVIE_TITLE = "epic"
 SCREEN_LABEL = "64CH ATMOS"
 BOOKING_QUEUE = queue.Queue()
 # --- AUTOBUIER CONFIGURATION ---
-TARGET_SEATS = ["H14", "Q14"] # Add the specific seats you want here!
+TARGET_SEATS = ["H15"] # Add the specific seats you want here!
 
 DEVICE_ID = "e655d7074359cd97"
 USER_ID = "94001055"
@@ -531,7 +531,6 @@ def fetch_seat_layout(session_id):
     }
     print(f"    -> [POST] (Session: {session_id})")
     resp = make_request('POST', url, headers=TEMP_HEADERS, json=payload)
-    print(resp.text)
     print(resp.status_code)
     if not resp or resp.status_code != 200:
         return {}
