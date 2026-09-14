@@ -12,9 +12,9 @@ import queue
 from supabase import create_client, Client
 
 # --- CONFIGURATION ---
-DATES = ["2026-09-13"]
+DATES = ["2026-09-14"]
 THEATRE_ID = "1039848" #vimal 70mm
-TARGET_MOVIE_TITLE = "epic"
+TARGET_MOVIE_TITLE = "irumudi"
 SCREEN_LABEL = "64CH ATMOS"
 BOOKING_QUEUE = queue.Queue()
 # --- AUTOBUIER CONFIGURATION ---
@@ -30,6 +30,15 @@ COOKIE_STRING = f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN}; x-refr
 
 # Thread-safe tracking to prevent double-buying
 IN_PROGRESS_SEATS = set()
+
+SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkcXhhZnlxcWtoeHVpcHpjamNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyOTYzNzIsImV4cCI6MjEwMjg3MjM3Mn0.dAerrc1sTh8CSnY6vZ4NtuvPXWNwjsHCl9gWZ436MLk"
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("[FATAL] Supabase URL or Key not found in environment variables. Exiting.")
+    exit()
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 STATE_FILE = "district_seat_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -206,11 +215,10 @@ def make_request(method, url, max_retries=3, proxy_override=None, **kwargs):
 
 def booking_worker():
     """
-    A single, dedicated worker thread that pulls seats from a queue 
-    and processes them one by one to avoid rate-limiting.
+    A single, dedicated worker thread that pulls seats from a queue,
+    locks them, and logs them to a Supabase database.
     """
     while True:
-        # This line will wait patiently until a seat is added to the queue
         job = BOOKING_QUEUE.get()
         
         seat_label = job["seat_label"]
@@ -219,19 +227,15 @@ def booking_worker():
         temp_trans_id = job["temp_trans_id"]
 
         try:
-            # Pick a random dedicated proxy for this specific job!
             thread_proxy = random.choice(SNIPER_PROXIES) if SNIPER_PROXIES else None
             
-            print(f"\n[✅ WORKER] Picking up seat '{seat_label}'. Initiating checkout.")
+            print(f"\n[✅ WORKER] Picking up seat '{seat_label}'. Initiating lock.")
             session_id = session_info["sessionId"]
-            content_id = session_info["contentId"]
-            show_time_str = session_info["showTime"] + ":00.000Z"
+            show_time_str = session_info["show_date_code"] + "T" + session_info["show_time"] + ":00.000Z"
             
-            # Match price from session areas
             ticket_price = 0
             for area in session_info.get("areas", []):
                 if area.get("code") == seat_meta["areaCode"]:
-                    # FIX 1: Explicitly cast to integer
                     ticket_price = int(area.get("price", 0))
                     break
                     
@@ -253,122 +257,69 @@ def booking_worker():
             
             headers_android = POST_HEADERS.copy()
             headers_android.update({"X-Device-Id": DEVICE_ID, "X-Access-Token": ACCESS_TOKEN, "X-Refresh-Token": REFRESH_TOKEN})
-            
-            # FIX 2: Minify the payload perfectly with zero spaces
             minified_payload = json.dumps(lock_payload, separators=(',', ':'))
             
             print(f"    -> [WORKER - {seat_label}] Locking seat...")
-            # FIX 3: Send using `data=minified_payload` instead of `json=lock_payload`
             lock_resp = make_request('POST', lock_url, headers=headers_android, data=minified_payload, proxy_override=thread_proxy)
+
+            if lock_resp is None or lock_resp.status_code != 200:
+                print(f"    -> [WORKER - {seat_label}] ❌ Lock request failed with status: {lock_resp.status_code if lock_resp else 'None'}. Response: {lock_resp.text[:200] if lock_resp else ''}")
+                IN_PROGRESS_SEATS.discard(seat_label)
+                BOOKING_QUEUE.task_done()
+                continue
+
+            lock_data = lock_resp.json()
+            booking_id = lock_data.get("bookingId")
             
-            # --- DEBUG BLOCK: DUMP THE TRUTH ---
-            if lock_resp is not None:
-                print(f"\n========== 🕵️ RAW SERVER RESPONSE FOR {seat_label} ==========")
-                print(f"STATUS CODE: {lock_resp.status_code}")
-                print(f"RESPONSE BODY:\n{lock_resp.text}")
-                print(f"PAYLOAD SENT:\n{lock_payload}")
-                print(f"Headers:\n{headers_android}")
-                print("=============================================================\n")
-            else:
-                print(f"\n[!] lock_resp is completely None. The request failed to send at all.")
-            # -----------------------------------
+            if not booking_id:
+                raise Exception(f"Failed to lock seat! No bookingId found in response. Full response: {lock_data}")
 
-            try:
-                new_temp_trans_id = lock_resp.json().get("tempTransId")
-            except Exception as e:
-                raise Exception(f"Failed to parse JSON. Raw text was: {lock_resp.text[:200]}")
+            # --- STEP 2: PARSE & LOG TO SUPABASE ---
+            print(f"    -> [WORKER - {seat_label}] Lock successful. Preparing to log to database.")
+            
+            seat_info_raw = lock_data.get("seatInfo", "")
+            seating_class, seat_num = seat_info_raw.split("-", 1) if "-" in seat_info_raw else (None, seat_info_raw)
 
-            if not new_temp_trans_id:
-                raise Exception(f"Failed to lock seat! No tempTransId found in response.")
-
-            # --- STEP 2: CHECKOUT ---
-            checkout_url = "https://www.district.in/gw/consumer/movies/v2/checkout?version=3&site_id=1&channel=web&child_site_id=1&platform=district&native_withdraw=1"
-            checkout_payload = {
-                "contentId": content_id, "tempTransId": new_temp_trans_id,
-                "paymentDetails": [{"payment_method_id": "50", "payment_method_type": "upi_qr", "wallet_balance": "0.0", "wallet_id": "0"}]
-            }
-
-            CHECKOUT_HEADERS = {
-                "Host": "www.district.in",
-                "Cookie": f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN}; x-refresh-token={REFRESH_TOKEN};",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
-                "Accept": "*/*",
-                "Origin": "https://www.district.in",
-                "Sec-Fetch-Site": "same-origin",
-                "Sec-Fetch-Mode": "cors",
-                "Content-Type": "application/json; charset=utf-8",
-                "Sec-Fetch-Dest": "empty",
-                "Referer": "https://www.district.in",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Priority": "u=1, i"
+            data_to_insert = {
+                "transaction_id": booking_id,
+                "booking_id": booking_id,
+                "trans_uid": booking_id,
+                "seat": seat_num,
+                "seating_class": seating_class,
+                "snipe_timestamp": lock_data.get("cartCreatedAt"),
+                "status": "AVAILABLE",
+                "venue_code": THEATRE_ID,
+                "platform_name": "district",
+                "event_title": session_info.get("event_title"),
+                "event_language": session_info.get("event_language"),
+                "event_dimension": session_info.get("event_dimension"),
+                "show_date_code": session_info.get("show_date_code"),
+                "show_time": session_info.get("show_time"),
+                "screen_name": session_info.get("screen_name"),
+                "attributes": session_info.get("attributes")
             }
             
-            print(f"    -> [WORKER - {seat_label}] Generating Order ID...")
+            # --- Retry Logic for Database Insert ---
+            logged_successfully = False
+            for attempt in range(3):
+                try:
+                    print(f"    -> [DB - {seat_label}] Attempting to insert (Try {attempt + 1}/3)...")
+                    supabase.table("tickets").insert(data_to_insert).execute()
+                    print(f"    -> [DB - {seat_label}] ✅ Successfully logged to database.")
+                    logged_successfully = True
+                    break 
+                except Exception as e:
+                    print(f"    -> [DB - {seat_label}] ⚠️ Insert failed: {e}")
+                    if attempt < 2:
+                        time.sleep(2) # Wait before retrying
             
-            # 1. Minify the payload to remove all spaces, matching the actual client exactly
-            minified_checkout_payload = json.dumps(checkout_payload, separators=(',', ':'))
-            
-            # 2. Use data= instead of json= to prevent the request library from reformatting it
-            checkout_resp = make_request('POST', checkout_url, headers=CHECKOUT_HEADERS, data=minified_checkout_payload)
-            print(CHECKOUT_HEADERS)
-            print(checkout_payload)
-            print(checkout_resp.status_code)
-            print(checkout_resp.text)
-            checkout_data = checkout_resp.json()
-            order_id = checkout_data.get("ORDER_ID")
-            pg_resp = checkout_data.get("pgResponse", {})
-            grand_total = pg_resp.get("grandTotal")
-            pay_hash = pg_resp.get("hash")
+            if not logged_successfully:
+                print(f"    -> [DB - {seat_label}] ❌ FAILED to log to Supabase after 3 attempts. Moving on.")
 
-            # --- STEP 3: GET SDK TOKEN ---
-            print(f"    -> [WORKER - {seat_label}] Fetching SDK Token...")
-            token_url = "https://www.district.in/gw/payments/in/get-sdk-token?version=3&site_id=1&channel=web&child_site_id=1&platform=district"
-            token_resp = make_request('POST', token_url, headers=headers_web, proxy_override=thread_proxy)
-            sdk_token = token_resp.json().get("token")
-
-            # --- STEP 4: MAKE PAYMENT (QR CODE) ---
-            print(f"    -> [WORKER - {seat_label}] Generating UPI QR Code...")
-            pay_url = "https://zpay.zomato.com/v2/sdk/make_payment"
-            pay_payload = (
-                f"host_redirect_url=https%3A%2F%2Fwww.district.in%2Fmovies%2Forder%2F{order_id}&"
-                f"service_type=ED_MOVIES&user_id={USER_ID}&order_type=ED_MOVIES&order_id={order_id}&"
-                f"country_id=1&payment_method_id=50&payment_method_type=upi_qr&amount={grand_total}&"
-                f"payments_hash={pay_hash}&phone=9247191127&isMobileView=1"
-            )
-            pay_headers = {
-                "Host": "zpay.zomato.com", "X-Pas-Token": sdk_token, "Content-Type": "application/x-www-form-urlencoded",
-                "User-Agent": GET_HEADERS["User-Agent"], "Origin": "https://www.district.in"
-            }
-            
-            pay_resp = make_request('POST', pay_url, headers=pay_headers, data=pay_payload, proxy_override=thread_proxy)
-            qr_b64 = pay_resp.json().get("response", {}).get("transaction", {}).get("qr_data", {}).get("image")
-            
-            if qr_b64:
-                # --- STEP 5: PUSH TO NTFY AS RAW IMAGE ---
-                print(f"    -> [WORKER - {seat_label}] Success! Sending QR to phone...")
-                clean_b64 = qr_b64.replace("\\", "")
-                image_bytes = base64.b64decode(clean_b64)
-                
-                requests.post(
-                    "https://ntfy.sh/dolby_unblock",
-                    data=image_bytes,
-                    headers={
-                        "Title": f"🎫 SEAT LOCKED: {seat_meta['areaDesc']} - {seat_label}",
-                        "Tags": "ticket,moneybag",
-                        "Priority": "urgent",
-                        "Filename": "pay_qr.png"
-                    },
-                    timeout=10
-                )
-            else:
-                print(f"    -> [WORKER - {seat_label}] ❌ Failed to extract QR Code.")
-                
         except Exception as e:
-            print(f"    -> [WORKER - {seat_label}] ❌ Error in pipeline: {e}")
-            IN_PROGRESS_SEATS.discard(seat_label) # Free it up to try again next cycle!
+            print(f"    -> [WORKER - {seat_label}] ❌ Fatal error in pipeline: {e}")
+            IN_PROGRESS_SEATS.discard(seat_label)
             
-        # Mark the task as done, so the queue knows it can move on.
         BOOKING_QUEUE.task_done()
 
 def fetch_sessions():
@@ -389,39 +340,48 @@ def fetch_sessions():
             
         try:
             data = resp.json()
-            
-            # Step 1: Safely check if ANY movies are listed yet
             movies_meta = data.get("meta", {}).get("movies", [])
             if not movies_meta:
                 print(f"    -> 0 shows listed currently for {date_str}.")
                 continue
                 
-            # Step 2: Dynamic ID matching via Title (Contains, Case-Insensitive)
-            target_mid = None
-            target_content_id = None
+            target_movie_meta = None
             for movie in movies_meta:
                 movie_name = movie.get("name", "").lower()
                 if TARGET_MOVIE_TITLE.lower() in movie_name:
-                    target_mid = movie.get("id")
-                    target_content_id = movie.get("contentId")
-                    print(f"    -> Matched title '{movie.get('name')}' to ID: {target_mid}")
+                    target_movie_meta = movie
+                    print(f"    -> Matched title '{movie.get('name')}' to ID: {target_movie_meta.get('id')}")
                     break
                     
-            if not target_mid:
-                print(f"    -> Target movie containing '{TARGET_MOVIE_TITLE}' not found in listed movies for {date_str}.")
+            if not target_movie_meta:
+                print(f"    -> Target movie containing '{TARGET_MOVIE_TITLE}' not found for {date_str}.")
                 continue
                 
-            # Step 3: Filter the sessions for the dynamically matched ID and Format
             all_sessions = data.get("pageData", {}).get("sessions", [])
             target_count = 0
             
             for show in all_sessions:
-                if show.get("mid") == target_mid and show.get("premiumLabel") == SCREEN_LABEL:
+                if show.get("mid") == target_movie_meta.get("id") and show.get("premiumLabel") == SCREEN_LABEL:
+                    # Parse date and time from the ISO string
+                    show_datetime_str = show.get("showTime", "")
+                    date_part, time_part = "", ""
+                    if "T" in show_datetime_str:
+                        date_part, time_part = show_datetime_str.split("T")
+
                     sessions.append({
+                        # Original Data
                         "sessionId": show.get("sid"),
-                        "showTime": show.get("showTime"),
-                        "contentId": target_content_id,
-                        "areas": show.get("areas", [])
+                        "contentId": target_movie_meta.get("contentId"),
+                        "areas": show.get("areas", []),
+                        
+                        # Enriched Data for Supabase
+                        "event_title": target_movie_meta.get("name"),
+                        "event_language": target_movie_meta.get("lang"),
+                        "event_dimension": target_movie_meta.get("scrnFmt"),
+                        "show_date_code": date_part,
+                        "show_time": time_part,
+                        "screen_name": show.get("audi"),
+                        "attributes": show.get("premiumLabel")
                     })
                     target_count += 1
                     
