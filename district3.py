@@ -12,13 +12,13 @@ import queue
 from supabase import create_client, Client
 
 # --- CONFIGURATION ---
-DATES = ["2026-09-14"]
+DATES = ["2026-09-15"]
 THEATRE_ID = "1039848" #vimal 70mm
-TARGET_MOVIE_TITLE = "mandaadi"
+TARGET_MOVIE_TITLE = "irumudi"
 SCREEN_LABEL = "64CH ATMOS"
 BOOKING_QUEUE = queue.Queue()
 # --- AUTOBUIER CONFIGURATION ---
-TARGET_SEATS = ["D8"] # Add the specific seats you want here!
+TARGET_SEATS = ["P11"] # Add the specific seats you want here!
 
 DEVICE_ID = "cbceae3a-205a-476b-bec1-a1158107322c"
 ACCESS_TOKEN = "1789404444152512182_8224993236068836475_73b358ce64e7e999ab76ef2103753a5fc31ab33ab70950f39d4814825da1fdb6"
