@@ -21,12 +21,10 @@ BOOKING_QUEUE = queue.Queue()
 TARGET_SEATS = ["Q16"] # Add the specific seats you want here!
 
 DEVICE_ID = "e655d7074359cd97"
-USER_ID = "94001055"
 ACCESS_TOKEN = "1789212473111770172_711805081438907057_6d65d672fcf1c7b42f59237d40918f43fed620a9b53570ac642f9632198bb3b8"
 REFRESH_TOKEN = "1789212473111774137_6651234817425529245_e28196895d819bdaf4707d1d3d3da4edfec986017e5281c6114f9e3bee3c3dac"
 
-# The Cookie string for web endpoints (checkout & SDK token)
-COOKIE_STRING = f"x-device-id={DEVICE_ID}; x-access-token={ACCESS_TOKEN}; x-refresh-token={REFRESH_TOKEN};"
+
 
 # Thread-safe tracking to prevent double-buying
 IN_PROGRESS_SEATS = set()
