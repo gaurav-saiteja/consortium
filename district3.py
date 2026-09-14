@@ -371,6 +371,7 @@ def fetch_sessions():
                     sessions.append({
                         # Original Data
                         "sessionId": show.get("sid"),
+                        "showTime": show_datetime_str,
                         "contentId": target_movie_meta.get("contentId"),
                         "areas": show.get("areas", []),
                         
