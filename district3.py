@@ -9,6 +9,7 @@ import random
 import threading
 import base64
 import queue
+from supabase import create_client, Client
 
 # --- CONFIGURATION ---
 DATES = ["2026-09-13"]
