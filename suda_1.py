@@ -22,12 +22,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260903"]
+DATES = ["20260927"]
 VENUE_CODE = "SUDA"
-STATE_FILE = "sniped_state_suda.json"
+STATE_FILE = "sniped_state_suda_1.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (57 * 60)
-TARGET_TIME_START = "02:00 PM"
-TARGET_TIME_END = "03:29 PM"
+TARGET_TIME_START = "12:01 PM"
+TARGET_TIME_END = "04:30 PM"
 SEAT_PATTERN = re.compile(r"([A-Z])[14](\d+)\+(\d+)")
 
 # Map class names to their exact BookMyShow ticket categories
@@ -41,11 +41,12 @@ CLASS_TICKET_CATEGORIES = {
 # Nested layout to handle identical row letters across different classes
 DESIRED_SEATS = {
     "UPPER BALCONY": {
-        "A": ["10", "11", "12", "13", "14"],
-        "B": ["10", "11", "12", "13", "14"]
-    },
-    "LOWER BALCONY": {
-        "D": ["18", "19", "20", "21"]
+        "H": ["09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"],
+        "G": ["09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"],
+        "F": ["09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"],
+        "A": ["13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25"],
+        "B": ["13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25"],
+        "C": ["13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25"]
     }
 }
 
@@ -283,10 +284,10 @@ def make_bms_request(method, url, network_state, max_retries=15, **kwargs):
         try:
             if method.upper() == 'GET':
                 resp = cffi_requests.get(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
-                logger.info(f"{resp.status_code}")
+                logger.info(f"status: {resp.status_code}")
             else:
                 resp = cffi_requests.post(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
-                logger.info(f"{resp.status_code}")
+                logger.info(f"status: {resp.status_code}")
             
             if resp.status_code in [429, 403]:
                 #time.sleep(3)
@@ -330,7 +331,7 @@ def find_target_session():
     for date_code in DATES:
         url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
         resp = make_bms_request('GET', url, network_state=network_state, headers=generate_headers(is_post=False))
-        logger.info(f"{resp.status_code}")
+        logger.info(f"status: {resp.status_code}")
         if not resp or resp.status_code != 200: 
             continue
             
@@ -409,12 +410,13 @@ def dynamic_sniper_worker(task_queue, notif_queue, wave_num):
         for attempt in range(MAX_SEAT_RETRIES):
             t_id, t_uid, b_id = lock_seat(s_id, meta["row_index"], meta["backend_seat"], c_code, a_id, t_cat, e_code, local_network)
             if t_id:
-                msg = f"[WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
+                msg = f"PAR [WAVE {wave_num}] Row {task['row']} Seat {task['seat_num']} is locked.\n\n{VENUE_CODE} {e_code}"
                 notif_queue.put({"msg": msg})
                 
                 # --- GRABROOM TELEMETRY ---
                 ticket_payload = {
                     "seat": f"{task['row']}{task['seat_num']}",
+                    "seating_class": task.get("seating_class"),      # <-- NEW LINE ADDED HERE
                     "booking_id": b_id,
                     "transaction_id": t_id,
                     "trans_uid": t_uid,
@@ -446,7 +448,7 @@ def fetch_seat_layout(session_id, network_state):
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
     resp = make_bms_request('POST', url, network_state=network_state, headers=generate_headers(is_post=True), data=payload)
-    logger.info(f"{resp.status_code}")
+    logger.info(f"status: {resp.status_code}")
     if not resp or resp.status_code != 200: 
         return ""
     try: 
@@ -535,12 +537,13 @@ def static_show_manager(session_id, my_seats, task_queue, notif_queue, state_dic
                     # 1. ALWAYS process the successfully locked seat, no matter what
                     roster.remove(test_seat) 
                     
-                    msg = f"[WAVE {wave_num}] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
+                    msg = f"PAR [WAVE {wave_num}] Row {test_seat['row']} Seat {test_seat['seat_num']} locked."
                     notif_queue.put({"msg": msg})
                     
                     # --- GRABROOM TELEMETRY ---
                     ticket_payload = {
                         "seat": f"{test_seat['row']}{test_seat['seat_num']}",
+                        "seating_class": test_seat.get("seating_class"),  # <-- NEW LINE ADDED HERE
                         "booking_id": b_id,
                         "transaction_id": t_id,
                         "trans_uid": t_uid,
@@ -623,7 +626,7 @@ def lock_seat(session_id, row_index, backend_seat, cat_code, area_id, ticket_cat
 
     data_str = json.dumps(payload, separators=(',', ':'))
     resp = make_bms_request('POST', url, network_state=network_state, headers=headers, data=data_str.encode('utf-8'))
-    logger.info(f"{resp.status_code}")
+    logger.info(f"status: {resp.status_code}")
     if resp and resp.status_code == 200:
         try:
             r_json = resp.json()
@@ -677,7 +680,7 @@ def main():
             target_sessions = find_target_session()
             if not target_sessions:
                 logger.info("    -> ⏳ No matching showtimes exist yet. Sleeping 8 seconds...")
-                time.sleep(8)
+                time.sleep(4)
             else:
                 logger.info(f"\n    -> 🎉 MATCH FOUND! Detected {len(target_sessions)} matching shows.")
                 break
@@ -723,6 +726,7 @@ def main():
                             
                             # Python dictionary updates are thread-safe (GIL protected)
                             available_seats[seat_key] = {
+                                "seating_class": target_class,       # <-- NEW LINE ADDED HERE
                                 "session_id": s_id, "row": target_row, "seat_num": target_seat,
                                 "meta": meta, "c_code": cat_info["cat_code"], "a_id": cat_info["area_id"],
                                 "ticket_category": ticket_category, "event_code": session["eventCode"],
