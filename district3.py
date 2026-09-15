@@ -12,7 +12,7 @@ import queue
 from supabase import create_client, Client
 
 # --- CONFIGURATION ---
-DATES = ["2026-09-15"]
+DATES = ["2026-09-16"]
 THEATRE_ID = "1039848" #vimal 70mm
 TARGET_MOVIE_TITLE = "irumudi"
 SCREEN_LABEL = "64CH ATMOS"
