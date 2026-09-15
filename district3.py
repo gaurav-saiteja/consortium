@@ -17,7 +17,7 @@ THEATRE_ID = "1039848" #vimal 70mm
 TARGET_MOVIE_TITLE = "irumudi"
 SCREEN_LABEL = "64CH ATMOS"
 BOOKING_QUEUE = queue.Queue()
-TARGET_SEATS = ["M14"]
+TARGET_SEATS = ["U11"]
 
 DEVICE_ID = "b9584776-9302-446b-8dff-0a4c2cd6e999"
 ACCESS_TOKEN = "1789443872377279912_7907596944463027582_efd83b7efccf4b29e26e4bf3d86eb533690a0bf5364e7a0be83a0504b46399fa"
@@ -277,7 +277,7 @@ def booking_worker():
             seating_class, seat_num = seat_info_raw.split("-", 1) if "-" in seat_info_raw else (None, seat_info_raw)
 
             success_msg = (
-                f"[{seat_info_raw}] {session_info.get('event_title')} on {session_info.get('show_date_code')} {session_info.get('show_time')}\n"
+                f"[{seat_info_raw}] locked. {session_info.get('event_title')} on {session_info.get('show_date_code')} {session_info.get('show_time')}\n"
                 f"Theatre: Vimal 70mm"
             )
             trigger_ntfy(success_msg)
