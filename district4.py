@@ -12,16 +12,14 @@ import queue
 from supabase import create_client, Client
 
 # --- CONFIGURATION ---
-DATES = ["2026-09-15"]
+DATES = ["2026-09-16"]
 THEATRE_ID = "1039848" #vimal 70mm
 TARGET_MOVIE_TITLE = "irumudi"
 SCREEN_LABEL = "64CH ATMOS"
 BOOKING_QUEUE = queue.Queue()
-TARGET_SEATS = ["P11"]
+TARGET_SEATS = ["U11"]
 
-DEVICE_ID = "cf51b5cf-cb7d-4d8a-9358-b55361735121"
-ACCESS_TOKEN = "1789408702302803102_7156565922643394283_d39bf75eafc1a2751d53b28b6b0c558b599cbcbaec603e18e4f64ac043d77399"
-REFRESH_TOKEN = "1789408702302805575_9080467928927919728_6bc85ad5e294343239b16659854ee57251d8c592f16665a9de10132fbaa87846"
+#PASTE BELOW
 
 
 
@@ -49,21 +47,7 @@ PROXIES = {
     "https": "socks5://127.0.0.1:40000"
 }
 
-RAW_PROXY_LIST = os.environ.get("PROXY_LIST", "")
-SNIPER_PROXIES = []
 
-for line in RAW_PROXY_LIST.strip().split("\n"):
-    line = line.strip()
-    if line:
-        parts = line.split(":")
-        if len(parts) == 4:
-            ip, port, user, pwd = parts
-            uri = f"http://{user}:{pwd}@{ip}:{port}"
-            SNIPER_PROXIES.append({"http": uri, "https": uri})
-
-print(f"[CONFIG] Loaded {len(SNIPER_PROXIES)} dedicated proxies for Sniper Threads.")
-
-# 1. Headers for district.in (Web Spoofing for GET)
 GET_HEADERS = {
     "Host": "www.district.in",
     "Api_source": "district",
@@ -73,7 +57,6 @@ GET_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9"
 }
 
-# 2. Headers for api.edition.in (Android App Spoofing for POST)
 POST_HEADERS = {
     "Host": "api.edition.in",
     "Content-Type": "application/json; charset=utf-8",
@@ -161,7 +144,6 @@ def trigger_ntfy(message):
         except Exception as e:
             print(f"    -> Ntfy ping {i+1} failed: {e}")
 
-# --- NETWORK & PARSING ---
 def toggle_warp():
     global USE_WARP
     if USE_WARP:
@@ -176,7 +158,6 @@ def toggle_warp():
 
 def make_request(method, url, max_retries=3, proxy_override=None, **kwargs):
     for attempt in range(1, max_retries + 1):
-        # If a thread provides its own proxy, use it! Otherwise, fallback to the main WARP logic.
         current_proxies = proxy_override if proxy_override else (PROXIES if USE_WARP else None)
 
         if 'headers' in kwargs:
@@ -194,11 +175,9 @@ def make_request(method, url, max_retries=3, proxy_override=None, **kwargs):
             if resp.status_code in [429, 403]:
                 print(f"    -> ⚠️ Rate limited ({resp.status_code}) on attempt {attempt}/{max_retries}.")
                 if attempt < max_retries:
-                    # ONLY toggle WARP if this is the main polling thread.
                     if not proxy_override:
                         toggle_warp()
                     else:
-                        # Sniper threads just pause for a second and try their private proxy again
                         time.sleep(1) 
                     continue
             return resp
@@ -224,7 +203,6 @@ def booking_worker():
         temp_trans_id = job["temp_trans_id"]
 
         try:
-            thread_proxy = random.choice(SNIPER_PROXIES) if SNIPER_PROXIES else None
             
             print(f"\n[✅ WORKER] Picking up seat '{seat_label}'. Initiating lock.")
             session_id = session_info["sessionId"]
@@ -238,7 +216,6 @@ def booking_worker():
                     
             ticket_type = f"{session_id}_{seat_meta['areaDesc']}"
 
-            # --- STEP 1: SET SEAT (Locking) ---
             lock_url = "https://api.edition.in/gw/consumer/movies/v2/set-seat?version=3&site_id=1&channel=ANDROIDAPPINSIDER&child_site_id=1&platform=district"
             lock_payload = {
                 "cancelOld": False, "cinemaId": int(THEATRE_ID), "sessionId": session_id,
@@ -257,7 +234,7 @@ def booking_worker():
             minified_payload = json.dumps(lock_payload, separators=(',', ':'))
             
             print(f"    -> [WORKER - {seat_label}] Locking seat...")
-            lock_resp = make_request('POST', lock_url, headers=headers_android, data=minified_payload, proxy_override=thread_proxy)
+            lock_resp = make_request('POST', lock_url, headers=headers_android, data=minified_payload)
 
             if lock_resp is None or lock_resp.status_code != 200:
                 print(f"    -> [WORKER - {seat_label}] ❌ Lock request failed with status: {lock_resp.status_code if lock_resp else 'None'}. Response: {lock_resp.text[:200] if lock_resp else ''}")
@@ -271,11 +248,16 @@ def booking_worker():
             if not booking_id:
                 raise Exception(f"Failed to lock seat! No bookingId found in response. Full response: {lock_data}")
 
-            # --- STEP 2: PARSE & LOG TO SUPABASE ---
             print(f"    -> [WORKER - {seat_label}] Lock successful. Preparing to log to database.")
             
             seat_info_raw = lock_data.get("seatInfo", "")
             seating_class, seat_num = seat_info_raw.split("-", 1) if "-" in seat_info_raw else (None, seat_info_raw)
+
+            success_msg = (
+                f"[{seat_info_raw}] locked. {session_info.get('event_title')} on {session_info.get('show_date_code')} {session_info.get('show_time')}\n"
+                f"Theatre: Vimal 70mm"
+            )
+            trigger_ntfy(success_msg)
 
             data_to_insert = {
                 "transaction_id": booking_id,
@@ -293,10 +275,10 @@ def booking_worker():
                 "show_date_code": session_info.get("show_date_code"),
                 "show_time": session_info.get("show_time"),
                 "screen_name": session_info.get("screen_name"),
-                "attributes": session_info.get("attributes")
+                "attributes": session_info.get("attributes"),
+                "content_id": session_info.get("contentId")
             }
-            
-            # --- Retry Logic for Database Insert ---
+
             logged_successfully = False
             for attempt in range(3):
                 try:
@@ -308,7 +290,7 @@ def booking_worker():
                 except Exception as e:
                     print(f"    -> [DB - {seat_label}] ⚠️ Insert failed: {e}")
                     if attempt < 2:
-                        time.sleep(2) # Wait before retrying
+                        time.sleep(2)
             
             if not logged_successfully:
                 print(f"    -> [DB - {seat_label}] ❌ FAILED to log to Supabase after 3 attempts. Moving on.")
@@ -359,20 +341,16 @@ def fetch_sessions():
             
             for show in all_sessions:
                 if show.get("mid") == target_movie_meta.get("id") and show.get("premiumLabel") == SCREEN_LABEL:
-                    # Parse date and time from the ISO string
                     show_datetime_str = show.get("showTime", "")
                     date_part, time_part = "", ""
                     if "T" in show_datetime_str:
                         date_part, time_part = show_datetime_str.split("T")
 
                     sessions.append({
-                        # Original Data
                         "sessionId": show.get("sid"),
                         "showTime": show_datetime_str,
                         "contentId": target_movie_meta.get("contentId"),
                         "areas": show.get("areas", []),
-                        
-                        # Enriched Data for Supabase
                         "event_title": target_movie_meta.get("name"),
                         "event_language": target_movie_meta.get("lang"),
                         "event_dimension": target_movie_meta.get("scrnFmt"),
@@ -442,7 +420,6 @@ def parse_layout(json_data):
                     
                     available_in_row.append(seat_num_str)
                     
-                    # If this is one of our sniper targets, save ALL its data!
                     full_seat_name = f"{row_letter}{seat_num_str}"
                     if full_seat_name in TARGET_SEATS:
                         target_seat_metadata[full_seat_name] = {
@@ -464,9 +441,8 @@ def main():
     start_time = time.time()
     
     print("==================================================")
-    print("🚀 STARTING DISTRICT SEAT SCRAPER (PROACTIVE SNIPER)")
+    print("🚀 STARTING DISTRICT SEAT SCRAPER")
     print("==================================================")
-    # Start the single, dedicated booking worker thread in the background
     worker_thread = threading.Thread(target=booking_worker, daemon=True)
     worker_thread.start()
     print("[CONFIG] Dedicated booking worker has been started.")
@@ -484,8 +460,6 @@ def main():
         print(f"🔄 STARTING POLLING CYCLE {cycle_count}")
         print(f"==================================================")
         
-        # Fetch dynamically every cycle. 
-        # If date 1 drops, it tracks it. Next cycle it still checks date 2 for new drops!
         target_sessions = fetch_sessions()
         total_sessions = len(target_sessions)
         
@@ -519,13 +493,11 @@ def main():
             current_total = sum(len(seats) for seats in current_seats.values())
             print(f"    -> Parse successful. Current Available Seats: {current_total}")
             
-            # --- FIRE SNIPER THREADS ---
             for target_seat, meta in target_metadata.items():
                 if target_seat not in IN_PROGRESS_SEATS:
                     print(f"    -> 🎯 TARGET SEAT AVAILABLE: {target_seat}! Adding to booking queue.")
                     IN_PROGRESS_SEATS.add(target_seat)
                     
-                    # Create a job package with all the data the worker needs
                     job = {
                         "seat_label": target_seat,
                         "seat_meta": meta,
@@ -543,7 +515,6 @@ def main():
             newly_unblocked_count = 0
             unblocked_rows_list = []
             
-            # Mathematical set diffing to find new seats
             for row, seats in current_seats.items():
                 old_seats_in_row = previous_rows.get(row, [])
                 new_seats = set(seats) - set(old_seats_in_row)
