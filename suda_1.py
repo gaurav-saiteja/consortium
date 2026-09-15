@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260915"]
+DATES = ["20260916"]
 VENUE_CODE = "SUDA"
 STATE_FILE = "sniped_state_suda_1.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (57 * 60)
