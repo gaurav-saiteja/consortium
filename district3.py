@@ -271,11 +271,16 @@ def booking_worker():
             if not booking_id:
                 raise Exception(f"Failed to lock seat! No bookingId found in response. Full response: {lock_data}")
 
-            # --- STEP 2: PARSE & LOG TO SUPABASE ---
             print(f"    -> [WORKER - {seat_label}] Lock successful. Preparing to log to database.")
             
             seat_info_raw = lock_data.get("seatInfo", "")
             seating_class, seat_num = seat_info_raw.split("-", 1) if "-" in seat_info_raw else (None, seat_info_raw)
+
+            success_msg = (
+                f"[{seat_info_raw}] {session_info.get('event_title')} on {session_info.get('show_date_code')} {session_info.get('show_time')}\n"
+                f"Theatre: Vimal 70mm"
+            )
+            trigger_ntfy(success_msg)
 
             data_to_insert = {
                 "transaction_id": booking_id,
