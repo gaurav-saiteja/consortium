@@ -256,8 +256,9 @@ def booking_worker():
             seating_class, seat_num = seat_info_raw.split("-", 1) if "-" in seat_info_raw else (None, seat_info_raw)
 
             success_msg = (
-                f"[{seat_info_raw}] locked. {session_info.get('event_title')} on {session_info.get('show_date_code')} {session_info.get('show_time')}\n"
-                f"Theatre: Vimal 70mm"
+                f"[{seat_info_raw}] locked. {session_info.get('event_title')} on {session_info.get('show_date_code')} "
+                f"{(datetime.strptime(session_info.get('show_time'), '%H:%M') + timedelta(hours=5, minutes=30)).strftime('%H:%M')}\n"
+                f"Vimal 70MM"
             )
             trigger_ntfy(success_msg)
 
