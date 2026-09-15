@@ -56,4 +56,12 @@ jobs:
           curl -x socks5://127.0.0.1:40000 https://1.1.1.1/cdn-cgi/trace | grep warp || echo "WARP Test Failed, but continuing..."
 
       - name: Run Polling Script
-        run: python -u district4.py
+        env:
+          BMS_EMAIL: '${{ secrets.BMS_EMAIL }}'
+          BMS_PHONE: '${{ secrets.BMS_PHONE }}'
+          NTFY_TOPIC: '${{ secrets.NTFY_TOPIC }}'
+          PROXY_LIST: '${{ secrets.PROXY_LIST }}'
+          # Add the new secrets to the environment
+          WORKER_URL: '${{ secrets.WORKER_URL }}'
+          WORKER_PASSPHRASE: '${{ secrets.WORKER_PASSPHRASE }}'
+        run: python -u suda_1.py
