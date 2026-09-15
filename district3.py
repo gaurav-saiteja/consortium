@@ -293,7 +293,8 @@ def booking_worker():
                 "show_date_code": session_info.get("show_date_code"),
                 "show_time": session_info.get("show_time"),
                 "screen_name": session_info.get("screen_name"),
-                "attributes": session_info.get("attributes")
+                "attributes": session_info.get("attributes"),
+                "content_id": session_info.get("contentId")
             }
             
             # --- Retry Logic for Database Insert ---
