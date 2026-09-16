@@ -252,7 +252,7 @@ def grabroom_producer_loop():
                 except Exception as e:
                     logger.error(f"[GRABROOM] ❌ Network error sending to Supabase: {e}. Retrying in 2s...")
                 
-                time.sleep(2)
+                time.sleep(0.5)
                 
             grabroom_queue.task_done()
         except Exception as e:
