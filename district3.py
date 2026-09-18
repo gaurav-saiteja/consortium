@@ -12,9 +12,9 @@ import queue
 from supabase import create_client, Client
 
 # --- CONFIGURATION ---
-DATES = ["2026-09-16"]
+DATES = ["2026-09-19"]
 THEATRE_ID = "1039848" #vimal 70mm
-TARGET_MOVIE_TITLE = "irumudi"
+TARGET_MOVIE_TITLE = "mandaadi"
 SCREEN_LABEL = "64CH ATMOS"
 BOOKING_QUEUE = queue.Queue()
 TARGET_SEATS = ["U12"]
