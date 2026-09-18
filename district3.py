@@ -217,8 +217,7 @@ def booking_worker():
     """
     while True:
         job = BOOKING_QUEUE.get()
-        
-        tracking_id = job["tracking_id"] # Get the unique ID
+        tracking_id = job["tracking_id"] 
         seat_label = job["seat_label"]
         seat_meta = job["seat_meta"]
         session_info = job["session_info"]
@@ -229,7 +228,7 @@ def booking_worker():
             
             print(f"\n[✅ WORKER] Picking up seat '{seat_label}'. Initiating lock.")
             session_id = session_info["sessionId"]
-            show_time_str = session_info["show_date_code"] + "T" + session_info["show_time"] + ":00.000Z"
+            show_time_str = session_info["show_date_code"] + "T" + session_info["show_time"] + ":00.000+05:30"
             
             ticket_price = 0
             for area in session_info.get("areas", []):
@@ -262,7 +261,7 @@ def booking_worker():
 
             if lock_resp is None or lock_resp.status_code != 200:
                 print(f"    -> [WORKER - {seat_label}] ❌ Lock request failed...")
-                IN_PROGRESS_SEATS.discard(tracking_id) # Update here
+                IN_PROGRESS_SEATS.discard(tracking_id) 
                 BOOKING_QUEUE.task_done()
                 continue
 
@@ -322,7 +321,7 @@ def booking_worker():
 
         except Exception as e:
             print(f"    -> [WORKER - {seat_label}] ❌ Fatal error in pipeline: {e}")
-            IN_PROGRESS_SEATS.discard(tracking_id) # Update here
+            IN_PROGRESS_SEATS.discard(tracking_id) 
             
         BOOKING_QUEUE.task_done()
 
@@ -528,13 +527,14 @@ def main():
             
             # --- FIRE SNIPER THREADS ---
             for target_seat, meta in target_metadata.items():
-                tracking_id = f"{s_id}_{target_seat}"
+                tracking_id = f"{s_id}_{target_seat}" # Unique ID per session + seat
                 
                 if tracking_id not in IN_PROGRESS_SEATS:
                     print(f"    -> 🎯 TARGET SEAT AVAILABLE: {target_seat}! Adding to booking queue.")
                     IN_PROGRESS_SEATS.add(tracking_id)
+                    
                     job = {
-                        "tracking_id": tracking_id,
+                        "tracking_id": tracking_id, 
                         "seat_label": target_seat,
                         "seat_meta": meta,
                         "session_info": session,
