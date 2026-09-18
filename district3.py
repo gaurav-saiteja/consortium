@@ -218,6 +218,7 @@ def booking_worker():
     while True:
         job = BOOKING_QUEUE.get()
         
+        tracking_id = job["tracking_id"] # Get the unique ID
         seat_label = job["seat_label"]
         seat_meta = job["seat_meta"]
         session_info = job["session_info"]
@@ -260,8 +261,8 @@ def booking_worker():
             lock_resp = make_request('POST', lock_url, headers=headers_android, data=minified_payload, proxy_override=thread_proxy)
 
             if lock_resp is None or lock_resp.status_code != 200:
-                print(f"    -> [WORKER - {seat_label}] ❌ Lock request failed with status: {lock_resp.status_code if lock_resp else 'None'}. Response: {lock_resp.text[:200] if lock_resp else ''}")
-                IN_PROGRESS_SEATS.discard(seat_label)
+                print(f"    -> [WORKER - {seat_label}] ❌ Lock request failed...")
+                IN_PROGRESS_SEATS.discard(tracking_id) # Update here
                 BOOKING_QUEUE.task_done()
                 continue
 
@@ -321,7 +322,7 @@ def booking_worker():
 
         except Exception as e:
             print(f"    -> [WORKER - {seat_label}] ❌ Fatal error in pipeline: {e}")
-            IN_PROGRESS_SEATS.discard(seat_label)
+            IN_PROGRESS_SEATS.discard(tracking_id) # Update here
             
         BOOKING_QUEUE.task_done()
 
@@ -527,12 +528,13 @@ def main():
             
             # --- FIRE SNIPER THREADS ---
             for target_seat, meta in target_metadata.items():
-                if target_seat not in IN_PROGRESS_SEATS:
+                tracking_id = f"{s_id}_{target_seat}"
+                
+                if tracking_id not in IN_PROGRESS_SEATS:
                     print(f"    -> 🎯 TARGET SEAT AVAILABLE: {target_seat}! Adding to booking queue.")
-                    IN_PROGRESS_SEATS.add(target_seat)
-                    
-                    # Create a job package with all the data the worker needs
+                    IN_PROGRESS_SEATS.add(tracking_id)
                     job = {
+                        "tracking_id": tracking_id,
                         "seat_label": target_seat,
                         "seat_meta": meta,
                         "session_info": session,
