@@ -17,7 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-DATES = ["20260812"]
+DATES = ["20261009"]
 VENUE_CODE = "PRHN"
 TARGET_TICKET_CATEGORY = "0005" # Hardcoded ticket category applies to all seats here
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
@@ -25,8 +25,8 @@ STATE_FILE = "sniped_state_2.json"
 
 # --- NEW: SHOWTIME CONSTRAINTS ---
 TARGET_ATTRIBUTE = "PCX HDR by BARCO" # The screen/attribute to look for
-TARGET_TIME_START = "12:00 PM"
-TARGET_TIME_END = "04:00 PM"
+TARGET_TIME_START = "12:10 PM"
+TARGET_TIME_END = "01:00 PM"
 
 # --- AUTO-LOCK / SNIPER SECRETS & CONFIG ---
 EMAIL = os.environ.get("BMS_EMAIL") 
