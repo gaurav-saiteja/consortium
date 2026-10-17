@@ -6,6 +6,8 @@ import os
 import re
 import random
 import subprocess
+import threading
+import queue
 from datetime import datetime
 
 # --- CONFIGURATION ---
@@ -49,8 +51,6 @@ user_agents = [
     "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Safari/537.36" # Samsung Galaxy Tab S9 (Tablet)
 ]
 
-# Track WARP State natively
-USE_WARP = False
 
 # Cloudflare WARP local proxy
 PROXIES = {
@@ -188,25 +188,19 @@ def trigger_ntfy(message):
         except Exception as e:
             print(f"    -> Ntfy ping {i+1} failed: {e}")
 
-def toggle_warp():
-    """Toggles Cloudflare WARP on/off and updates the proxy state."""
-    global USE_WARP
-    if USE_WARP:
-        print("    -> 🚨 [IP ROTATION] WARP is currently ON. Disconnecting WARP (Switching to Runner IP)...")
-        subprocess.run(["warp-cli", "--accept-tos", "disconnect"], capture_output=True, check=False)
-        USE_WARP = False
-    else:
-        print("    -> 🚨 [IP ROTATION] WARP is currently OFF. Connecting to WARP (Switching to Cloudflare Proxy)...")
-        subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-        time.sleep(5)  # Wait for the tunnel to establish
-        USE_WARP = True
+def start_warp():
+    print("    -> 🛡️ Pre-warming Cloudflare WARP Proxy (Binding to 127.0.0.1:40000)...")
+    subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
+    time.sleep(5)
 
-def make_bms_request(method, url, max_retries=3, **kwargs):
+# Change the signature to require network_state:
+def make_bms_request(method, url, network_state, max_retries=3, **kwargs):
     endpoint_path = url.split("?")[0].split("/")[-1]
     is_post = method.upper() == 'POST'
 
     for attempt in range(1, max_retries + 1):
-        current_proxies = PROXIES if USE_WARP else None
+        # State 0 = None (Raw IP), State 1 = PROXIES (WARP)
+        current_proxies = PROXIES if network_state["state"] == 1 else None
         headers = generate_headers(is_post=is_post)
         
         try:
@@ -215,27 +209,129 @@ def make_bms_request(method, url, max_retries=3, **kwargs):
             else:
                 resp = cffi_requests.get(url, headers=headers, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
             
-            # Request status code logging
-            print(f"[{method.upper()}] /{endpoint_path} -> HTTP {resp.status_code} (WARP: {USE_WARP})")
+            print(f"[{method.upper()}] /{endpoint_path} -> HTTP {resp.status_code} (State: {network_state['state']})")
             
             if resp.status_code in [429, 403]:
-                print(f"    -> ⚠️ Rate limited ({resp.status_code}) on attempt {attempt}/{max_retries}.")
+                print(f"    -> ⚠️ Rate limited ({resp.status_code}). Bouncing network state...")
                 if attempt < max_retries:
-                    toggle_warp()
+                    # Hop between State 0 and State 1
+                    network_state["state"] = (network_state["state"] + 1) % 2
                     time.sleep(2)
                     continue
                 else:
-                    print("    -> ❌ Max retries reached for this request.")
+                    print("    -> ❌ Max retries reached.")
             
             return resp
             
         except Exception as e:
-            print(f"[{method.upper()}] /{endpoint_path} -> Network error on attempt {attempt}: {e}")
+            print(f"[{method.upper()}] /{endpoint_path} -> Network error: {e}")
             if attempt < max_retries:
                 time.sleep(3)
                 continue
     
     return None
+
+def notification_worker(notif_queue, start_time):
+    print("    -> [THREAD] 🔔 Notification background thread active.")
+    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        try:
+            msg = notif_queue.get(timeout=2)
+            trigger_ntfy(msg) # Ensure trigger_ntfy just posts the message
+            notif_queue.task_done()
+        except queue.Empty:
+            continue
+
+def state_worker(state_queue, start_time):
+    print("    -> [THREAD] 💾 Git State Saver background thread active.")
+    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        try:
+            # Expecting a tuple: (session_id, session_data_dict)
+            s_id, s_data = state_queue.get(timeout=2) 
+            
+            for attempt in range(3):
+                quiet_git_pull()
+                latest_state = read_local_state()
+                
+                # Apply the specific thread's delta
+                latest_state[s_id] = s_data 
+                
+                with open(STATE_FILE, "w") as f:
+                    json.dump(latest_state, f, indent=2)
+                
+                subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
+                status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+                
+                if STATE_FILE in status.stdout:
+                    subprocess.run(["git", "commit", "-m", f"Update state for {s_id}"], capture_output=True, check=False)
+                    if quiet_git_push():
+                        break
+                    time.sleep(2) # Retry push on collision
+                else:
+                    break # No changes to push
+            
+            state_queue.task_done()
+        except queue.Empty:
+            continue
+
+def session_poller_thread(session, start_time, state_queue, notif_queue, initial_state):
+    s_id = session["sessionId"]
+    s_date = session["dateCode"]
+    s_time = session["time"]
+    
+    local_network = {"state": 0}
+    
+    # Initialize thread's memory from the global state
+    my_memory = initial_state.get(s_id, {"date": s_date, "time": s_time, "total": 0, "rows": {}})
+    is_first_run = len(my_memory.get("rows", {})) == 0
+
+    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        print(f"\n[THREAD {s_id}] Checking Session (Time: {s_time})")
+        time.sleep(10)
+        
+        str_data = fetch_seat_layout(s_id, local_network) # Pass local_network here!
+        if not str_data:
+            continue
+            
+        current_seats = parse_layout(str_data)
+        current_total = sum(len(seats) for seats in current_seats.values())
+        
+        previous_total = my_memory.get("total", 0)
+        previous_rows = my_memory.get("rows", {})
+        
+        newly_unblocked_count = 0
+        unblocked_rows_list = []
+        
+        for row, seats in current_seats.items():
+            old_seats_in_row = previous_rows.get(row, [])
+            new_seats = set(seats) - set(old_seats_in_row)
+            if new_seats:
+                newly_unblocked_count += len(new_seats)
+                unblocked_rows_list.append(row)
+        
+        if newly_unblocked_count > 0:
+            print(f"    -> [THREAD {s_id}] 🟢 UNBLOCKS: +{newly_unblocked_count} new seats!")
+            if not is_first_run and newly_unblocked_count >= 3:
+                rows_str = ", ".join(sorted(unblocked_rows_list))
+                human_date = humanize_date(s_date)
+                movie_name = session.get("movieTitle", TARGET_MOVIE)
+                screen_label = session.get("screenName", f"Screen {TARGET_SCREEN}")
+
+                msg = f"[{newly_unblocked_count}] {movie_name} ({screen_label})\nRows: {rows_str}\n\n{human_date}, {s_time}"
+                notif_queue.put(msg) # Push to queue instead of calling trigger_ntfy directly
+            
+            # Update memory and push to Git queue
+            my_memory["rows"] = current_seats
+            my_memory["total"] = current_total
+            state_queue.put((s_id, my_memory))
+
+        elif current_total < previous_total:
+            print(f"    -> [THREAD {s_id}] 🔴 Seats booked. Dropped to {current_total}.")
+            my_memory["rows"] = current_seats
+            my_memory["total"] = current_total
+            state_queue.put((s_id, my_memory))
+            
+        is_first_run = False
+
 
 def fetch_sessions():
     sessions = []
@@ -355,110 +451,35 @@ def main():
         print("No valid sessions found. Exiting.")
         return
 
-    print("\n[GIT] Loading initial state from repository...")
-    state = load_state()
-    is_first_run = len(state) == 0
-    if is_first_run:
-        print("[STATE] Empty state found. Initializing baseline silently...")
-    else:
-        print(f"[STATE] Loaded existing state for {len(state)} sessions.")
+    # 1. Pre-warm WARP
+    start_warp()
 
-    cycle_count = 1
+    # 2. Setup Queues and Workers
+    notif_queue = queue.Queue()
+    state_queue = queue.Queue()
     
-    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        print(f"\n==================================================")
-        print(f"🔄 STARTING POLLING CYCLE {cycle_count}")
-        print(f"==================================================")
-        
-        # Pull latest state before starting the cycle
-        state = load_state()
-        deltas = {} # Track ONLY the sessions that change during this cycle
-        
-        for index, session in enumerate(target_sessions, 1):
-            s_id = session["sessionId"]
-            s_date = session["dateCode"]
-            s_time = session["time"]
-            
-            print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Date: {s_date} Time: {s_time})")
-            print("    -> Sleeping for 30 seconds (Rate Limit Prevention)...")
-            time.sleep(10) 
-            
-            str_data = fetch_seat_layout(s_id)
-            if not str_data:
-                continue
-                
-            current_seats = parse_layout(str_data)
-            current_total = sum(len(seats) for seats in current_seats.values())
-            
-            # Minimal seat logging
-            print(f"    -> Session [{s_id}] ({s_time}) | Available Seats: {current_total}")
-            
-            if s_id not in state:
-                state[s_id] = {"date": s_date, "time": s_time, "total": 0, "rows": {}}
-            
-            previous_total = state[s_id].get("total", 0)
-            previous_rows = state[s_id].get("rows", {})
-            
-            newly_unblocked_count = 0
-            unblocked_rows_list = []
-            
-            for row, seats in current_seats.items():
-                old_seats_in_row = previous_rows.get(row, [])
-                new_seats = set(seats) - set(old_seats_in_row)
-                
-                if new_seats:
-                    newly_unblocked_count += len(new_seats)
-                    unblocked_rows_list.append(row)
-            
-            if newly_unblocked_count > 0:
-                print(f"    -> 🟢 DETECTED UNBLOCKS: +{newly_unblocked_count} new seats!")
-                
-                if not is_first_run:
-                    if newly_unblocked_count >= 3:
-                        rows_str = ", ".join(sorted(unblocked_rows_list))
-                        human_date = humanize_date(s_date)
-                        movie_name = session.get("movieTitle", TARGET_MOVIE)
-                        screen_label = session.get("screenName", f"Screen {TARGET_SCREEN}")
+    threading.Thread(target=notification_worker, args=(notif_queue, start_time), daemon=True).start()
+    threading.Thread(target=state_worker, args=(state_queue, start_time), daemon=True).start()
 
-                        msg = (
-                            f"[{newly_unblocked_count}] {movie_name} ({screen_label})\n"
-                            f"Rows: {rows_str}\n\n"
-                            f"{human_date}, {s_time}"
-                        )
-                        trigger_ntfy(msg)
-                    else:
-                        print(f"    -> 🟡 Less than 3 seats unblocked ({newly_unblocked_count}). Skipping notification.")
-                
-                # Update memory & Track Delta
-                state[s_id]["rows"] = current_seats
-                state[s_id]["total"] = current_total
-                deltas[s_id] = state[s_id]
+    # 3. Load Initial State
+    print("\n[GIT] Loading initial state from repository...")
+    initial_state = load_state()
 
-            elif current_total < previous_total:
-                print(f"    -> 🔴 Seats booked. Total dropped from {previous_total} down to {current_total}.")
-                # Update memory & Track Delta
-                state[s_id]["rows"] = current_seats
-                state[s_id]["total"] = current_total
-                deltas[s_id] = state[s_id]
-                
-            else:
-                print("    -> ⚪ No changes detected.")
+    # 4. Spawn Parallel Poller Threads
+    threads = []
+    for session in target_sessions:
+        t = threading.Thread(
+            target=session_poller_thread, 
+            args=(session, start_time, state_queue, notif_queue, initial_state)
+        )
+        t.start()
+        threads.append(t)
 
-        if deltas:
-            print("\n[STATE] Cycle finished. Changes detected, merging and saving to Git...")
-            # Save state will handle merging our deltas with the newest Git data
-            # and return the freshly synced state to update our memory
-            state = save_state(deltas, f"State update at cycle {cycle_count}")
-        else:
-            print("\n[STATE] Cycle finished. No changes detected.")
-            
-        if is_first_run:
-            is_first_run = False
-            print("[STATE] First run baseline has been successfully established.")
-            
-        cycle_count += 1
+    # 5. Keep main thread alive until workers finish
+    for t in threads:
+        t.join()
         
-    print("\n🏁 Time limit reached (5h 55m). Gracefully shutting down.")
+    print("\n🏁 Time limit reached. Gracefully shutting down.")
 
 if __name__ == "__main__":
     main()
