@@ -64,4 +64,4 @@ jobs:
           # Add the new secrets to the environment
           WORKER_URL: '${{ secrets.WORKER_URL }}'
           WORKER_PASSPHRASE: '${{ secrets.WORKER_PASSPHRASE }}'
-        run: python -u unb_new_1.py
+        run: python -u unb_new.py
