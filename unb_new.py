@@ -4,15 +4,50 @@ import time
 import json
 import os
 import re
+import random
 import subprocess
 from datetime import datetime
 
 # --- CONFIGURATION ---
-DATES = ["20260801"]
-VENUE_CODE = "ALUC"
-EVENT_CODE = "ET00502689"
+DATES = ["20261018"]
+VENUE_CODE = "PRHN"
+TARGET_MOVIE = "jailer"     
+TARGET_SCREEN = "4"
 STATE_FILE = "third_day_state.json"
-MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60) # 5 hours 55 mins
+MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60)
+
+user_agents = [
+    "Mozilla/5.0 (Linux; U; Android 16;zh-cn; TB375FC Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.7389.0 MobileLenovoBrowser/9.2.7 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 8.1.0; vivo Y83) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Infinix X6532 Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; Lenovo YT-J706X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 15; SM-S908B Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; U; Android 13; zh-cn; M2012K11AC Build/TKQ1.221114.001) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.7049.79 Mobile Safari/537.36 XiaoMi/MiuiBrowser/20.25.1020805",
+    "Mozilla/5.0 (Linux; Android 16; 23129RN51X Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/150.0.7871.181 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; 2210132C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; V2247) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; A001SH) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Samsung Galaxy S24 Ultra
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36", # Google Pixel 8 Pro
+    "Mozilla/5.0 (Linux; Android 14; CPH2581) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36", # OnePlus 12
+    "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.110 Mobile Safari/537.36", # Samsung Galaxy A54 5G
+    "Mozilla/5.0 (Linux; Android 13; 22101316G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.119 Mobile Safari/537.36", # Xiaomi Redmi Note 12 Pro
+    "Mozilla/5.0 (Linux; Android 14; A065) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Nothing Phone (2)
+    "Mozilla/5.0 (Linux; Android 13; CPH2525) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.178 Mobile Safari/537.36", # Oppo Reno 10 Pro
+    "Mozilla/5.0 (Linux; Android 13; RMX3561) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.6312.100 Mobile Safari/537.36", # Realme GT Neo 3
+    "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Google Pixel 6a
+    "Mozilla/5.0 (Linux; Android 14; V2324A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.113 Mobile Safari/537.36", # Vivo X100 Pro
+    "Mozilla/5.0 (Linux; Android 14; SM-F946B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Samsung Galaxy Z Fold 5
+    "Mozilla/5.0 (Linux; Android 14; XQ-DQ72) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Mobile Safari/537.36", # Sony Xperia 1 V
+    "Mozilla/5.0 (Linux; Android 13; motorola edge 40 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.179 Mobile Safari/537.36", # Motorola Edge 40 Neo
+    "Mozilla/5.0 (Linux; Android 14; 23049PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36", # Poco F5
+    "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Safari/537.36" # Samsung Galaxy Tab S9 (Tablet)
+]
 
 # Track WARP State natively
 USE_WARP = False
@@ -23,29 +58,41 @@ PROXIES = {
     "https": "socks5://127.0.0.1:40000"
 }
 
-GET_HEADERS = {
-    "Host": "in.bookmyshow.com",
-    "Content-Type": "application/json",
-    "X-Latitude": "17.385044",
-    "X-Subregion-Code": "HYD",
-    "X-App-Code": "MOBAND2",
-    "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011)",
-    "X-App-Version": "18.2.3",
-    "Accept-Encoding": "gzip, deflate",
-    "Connection": "keep-alive"
-}
 
-POST_HEADERS = {
-    "Host": "services-in.bookmyshow.com",
-    "X-Timeout": "10",
-    "X-Latitude": "17.385044",
-    "X-Subregion-Code": "HYD",
-    "X-App-Code": "MOBAND2",
-    "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Android SDK built for x86_64 Build/QSR1.211112.011)",
-    "X-App-Version": "18.2.3",
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Accept-Encoding": "gzip, deflate"
-}
+def generate_headers(is_post=False):
+    app_sub1 = f"1{random.randint(10, 99)}"
+    app_sub2 = f"1{random.randint(10, 99)}"
+    bms_id = f"1.4{random.randint(1000000, 9999999)}.{random.randint(1000000000000, 9999999999999)}"
+    device_id = f"{random.randint(0, 0xFFFFFFFFFFFFFFFF):016x}"
+    ua = random.choice(user_agents) if user_agents else "Dalvik/2.1.0 (Linux; U; Android 10; Build/QSR1.211112.011)"
+
+    headers = {
+        "Host": "services-in.bookmyshow.com" if is_post else "in.bookmyshow.com",
+        "X-Bms-Id": bms_id,
+        "X-Device-Id": device_id,
+        "User-Agent": ua,
+        "X-App-Version": f"18.{app_sub1}.{app_sub2}",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive"
+    }
+    if is_post:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    else:
+        headers["Lang"] = "en"
+        
+    return headers
+
+def matches_movie(candidate_title, target):
+    """Safest net: strips symbols and compares lowercase alphanumeric sequences."""
+    clean_candidate = re.sub(r'[^a-z0-9]', '', str(candidate_title).lower())
+    clean_target = re.sub(r'[^a-z0-9]', '', str(target).lower())
+    return bool(clean_target and clean_target in clean_candidate)
+
+def matches_screen(screen_name, target_screen):
+    """Extracts numeric digits to accurately match screen names (e.g. 'SCREEN 6' -> '6')."""
+    screen_digits = re.findall(r'\d+', str(screen_name))
+    target_digits = re.findall(r'\d+', str(target_screen))
+    return bool(screen_digits and target_digits and screen_digits[0] == target_digits[0])
 
 def humanize_date(date_str):
     dt = datetime.strptime(date_str, "%Y%m%d")
@@ -155,33 +202,35 @@ def toggle_warp():
         USE_WARP = True
 
 def make_bms_request(method, url, max_retries=3, **kwargs):
-    """Network wrapper that intercepts 429s, toggles WARP, and retries the request seamlessly."""
+    endpoint_path = url.split("?")[0].split("/")[-1]
+    is_post = method.upper() == 'POST'
+
     for attempt in range(1, max_retries + 1):
-        # Dynamically apply proxies only if WARP is ON
         current_proxies = PROXIES if USE_WARP else None
+        headers = generate_headers(is_post=is_post)
         
         try:
-            if method.upper() == 'GET':
-                resp = cffi_requests.get(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
+            if is_post:
+                resp = cffi_requests.post(url, headers=headers, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
             else:
-                resp = cffi_requests.post(url, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
+                resp = cffi_requests.get(url, headers=headers, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
             
-            print(f"    -> Status: {resp.status_code} (Using WARP: {USE_WARP})")
+            # Request status code logging
+            print(f"[{method.upper()}] /{endpoint_path} -> HTTP {resp.status_code} (WARP: {USE_WARP})")
             
-            # Catch Rate Limits
-            if resp.status_code in [429,403]:
-                print(f"    -> ⚠️ Rate limited (429) on attempt {attempt}/{max_retries}.")
+            if resp.status_code in [429, 403]:
+                print(f"    -> ⚠️ Rate limited ({resp.status_code}) on attempt {attempt}/{max_retries}.")
                 if attempt < max_retries:
                     toggle_warp()
-                    print("    -> Retrying request...")
-                    continue # Retry loop
+                    time.sleep(2)
+                    continue
                 else:
                     print("    -> ❌ Max retries reached for this request.")
             
             return resp
             
         except Exception as e:
-            print(f"    -> ⚠️ Network exception on attempt {attempt}: {e}")
+            print(f"[{method.upper()}] /{endpoint_path} -> Network error on attempt {attempt}: {e}")
             if attempt < max_retries:
                 time.sleep(3)
                 continue
@@ -190,34 +239,55 @@ def make_bms_request(method, url, max_retries=3, **kwargs):
 
 def fetch_sessions():
     sessions = []
+    seen_session_ids = set()
+
     for date_code in DATES:
         time.sleep(3)
-        print(f"\n[NETWORK] Fetching sessions for Date: {date_code}...")
-        url = f"https://in.bookmyshow.com/api/movies-data/seatlayout/v1/primary?eventCode={EVENT_CODE}&dateCode={date_code}&regionCode=HYD&venueCode={VENUE_CODE}"
+        url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
         
-        resp = make_bms_request('GET', url, headers=GET_HEADERS)
+        resp = make_bms_request('GET', url)
         if not resp or resp.status_code != 200:
-            print(f"    -> Failed fetching {date_code}. Skipping...")
+            print(f"    -> Failed fetching showtimes for {date_code}.")
             continue
             
         try:
             data = resp.json()
-            shows = data.get("data", {}).get("showTimes", [])
-            print(f"    -> Found {len(shows)} total shows for this date. Filtering for DOLBY CINEMA...")
-            
-            pcx_count = 0
-            for show in shows:
-                if show.get("attributes") == "DOLBY CINEMA":
-                    sessions.append({
-                        "sessionId": show["sessionId"],
-                        "dateCode": show["showDateCode"],
-                        "time": show["showTime"]
-                    })
-                    pcx_count += 1
-            print(f"    -> Filtered {pcx_count} DOLBY CINEMA sessions for {date_code}.")
+            show_details = data.get("ShowDetails", [])
+            matched_count = 0
+
+            for detail in show_details:
+                for event in detail.get("Event", []):
+                    event_title = event.get("EventTitle", "")
+                    child_events = event.get("ChildEvents", [])
+                    
+                    # Safe-net movie search across master EventTitle and ChildEvent names
+                    title_match = matches_movie(event_title, TARGET_MOVIE) or any(
+                        matches_movie(c.get("EventName", ""), TARGET_MOVIE) for c in child_events
+                    )
+                    if not title_match:
+                        continue
+                        
+                    for child in child_events:
+                        for show in child.get("ShowTimes", []):
+                            session_id = show.get("SessionId")
+                            screen_name = show.get("ScreenName", "")
+                            
+                            # Screen intersection check
+                            if session_id and session_id not in seen_session_ids and matches_screen(screen_name, TARGET_SCREEN):
+                                sessions.append({
+                                    "sessionId": session_id,
+                                    "dateCode": show.get("ShowDateCode", date_code),
+                                    "time": show.get("ShowTime", ""),
+                                    "movieTitle": event_title,
+                                    "screenName": screen_name
+                                })
+                                seen_session_ids.add(session_id)
+                                matched_count += 1
+                                
+            print(f"    -> Matched {matched_count} session(s) for '{TARGET_MOVIE}' on Screen {TARGET_SCREEN} ({date_code}).")
             
         except Exception as e:
-            print(f"    -> JSON Parse error for {date_code}: {e}")
+            print(f"    -> JSON parse error for {date_code}: {e}")
             
     return sessions
 
@@ -225,17 +295,14 @@ def fetch_seat_layout(session_id):
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
     
-    print(f"    -> [POST] {url} (Session: {session_id})")
-    resp = make_bms_request('POST', url, headers=POST_HEADERS, data=payload)
-    
+    resp = make_bms_request('POST', url, data=payload)
     if not resp or resp.status_code != 200:
-        print(f"    -> Failed layout fetch.")
         return ""
         
     try:
         return resp.json().get("BookMyShow", {}).get("strData", "")
     except Exception as e:
-        print(f"    -> Exception during JSON parse for layout {session_id}: {e}")
+        print(f"    -> Exception parsing layout JSON (Session {session_id}): {e}")
         return ""
 
 def parse_layout(str_data):
@@ -318,12 +385,13 @@ def main():
             
             str_data = fetch_seat_layout(s_id)
             if not str_data:
-                print("    -> Error: Received empty strData.")
                 continue
                 
             current_seats = parse_layout(str_data)
             current_total = sum(len(seats) for seats in current_seats.values())
-            print(f"    -> Parse successful. Current Available Seats: {current_total}")
+            
+            # Minimal seat logging
+            print(f"    -> Session [{s_id}] ({s_time}) | Available Seats: {current_total}")
             
             if s_id not in state:
                 state[s_id] = {"date": s_date, "time": s_time, "total": 0, "rows": {}}
@@ -346,19 +414,20 @@ def main():
                 print(f"    -> 🟢 DETECTED UNBLOCKS: +{newly_unblocked_count} new seats!")
                 
                 if not is_first_run:
-                    # Check if the unblocked seats meet the minimum threshold of 6
                     if newly_unblocked_count >= 3:
                         rows_str = ", ".join(sorted(unblocked_rows_list))
                         human_date = humanize_date(s_date)
+                        movie_name = session.get("movieTitle", TARGET_MOVIE)
+                        screen_label = session.get("screenName", f"Screen {TARGET_SCREEN}")
 
                         msg = (
-                            f"[{newly_unblocked_count}] ODSY DOLBY."
-                            f"{rows_str} rows unblocked for #SpiderManBrandNewDay at ALLU DOLBY CINEMA.\n\n"
+                            f"[{newly_unblocked_count}] {movie_name} ({screen_label})\n"
+                            f"Rows: {rows_str}\n\n"
                             f"{human_date}, {s_time}"
                         )
                         trigger_ntfy(msg)
                     else:
-                        print(f"    -> 🟡 Less than 6 seats unblocked ({newly_unblocked_count}). Skipping notification to avoid spam.")
+                        print(f"    -> 🟡 Less than 3 seats unblocked ({newly_unblocked_count}). Skipping notification.")
                 
                 # Update memory & Track Delta
                 state[s_id]["rows"] = current_seats
