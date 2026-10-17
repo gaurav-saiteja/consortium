@@ -222,11 +222,11 @@ def render_seat_image(grid, new_seats_dict):
     BORDER_WIDTH = int(1.5 * SCALE)
     
     # Exact BookMyShow Color Palette
-    COLOR_AVAILABLE_OUTLINE = "#21B551" # Vibrant BMS Emerald
-    COLOR_AVAILABLE_TEXT = "#4A4A4A"    # Dark Grey
-    COLOR_BOOKED_FILL = "#E6E6E6"       # Light Grey
-    COLOR_BOOKED_TEXT = "#FFFFFF"       # White
-    COLOR_ROW_TEXT = "#000000"          # Black
+    COLOR_AVAILABLE_OUTLINE = "#68C97E" # Vibrant BMS Emerald
+    COLOR_AVAILABLE_TEXT = "#7E7E7E"    # Dark Grey
+    COLOR_BOOKED_FILL = "#E5E5E5"       # Light Grey
+    COLOR_BOOKED_TEXT = "#F7F7F7"       # White
+    COLOR_ROW_TEXT = "#777777"          # Black
     
     width = (max_grid_x + 2) * STEP + (40 * SCALE)
     height = (max_y - min_y + 1) * STEP + (40 * SCALE)
