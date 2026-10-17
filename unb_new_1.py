@@ -15,7 +15,7 @@ from datetime import datetime
 DATES = ["20261019"]
 VENUE_CODE = "PRHN"
 TARGET_MOVIE = "jailer"     
-TARGET_SCREEN = "4"
+TARGET_SCREEN = "6"
 STATE_FILE = "thirdd_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60)
 
