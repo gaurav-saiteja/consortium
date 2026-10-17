@@ -224,7 +224,7 @@ def render_seat_image(grid, new_seats_dict):
     
     # Exact BookMyShow Color Palette
     COLOR_AVAILABLE_OUTLINE = "#1FAD3E" # Vibrant BMS Emerald
-    COLOR_AVAILABLE_TEXT = "#7E7E7E"    # Dark Grey
+    COLOR_AVAILABLE_TEXT = "#454545"    # Dark Grey
     COLOR_BOOKED_FILL = "#E5E5E5"       # Light Grey
     COLOR_BOOKED_TEXT = "#F9F9F9"       # White
     COLOR_ROW_TEXT = "#2A2A2A"          # Black
