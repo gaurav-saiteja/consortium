@@ -241,7 +241,7 @@ def toggle_warp():
         time.sleep(3)  # Wait for the tunnel to establish
         USE_WARP = True
 
-def make_bms_request(method, url, max_retries=3, **kwargs):
+def make_bms_request(method, url, max_retries=9, **kwargs):
     endpoint_path = url.split("?")[0].split("/")[-1]
     is_post = method.upper() == 'POST'
 
