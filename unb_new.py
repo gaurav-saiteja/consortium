@@ -421,7 +421,7 @@ def main():
             
             print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Date: {s_date} Time: {s_time})")
             print("    -> Sleeping for 30 seconds (Rate Limit Prevention)...")
-            time.sleep(5) 
+            time.sleep(3) 
             
             str_data = fetch_seat_layout(s_id)
             if not str_data:
