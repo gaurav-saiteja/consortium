@@ -177,73 +177,85 @@ def parse_grid_data(str_data):
 
 
 def render_seat_image(grid, new_seats_dict):
-    """Creates a native, in-memory WebP image focused specifically on the newly unblocked clusters."""
+    """Creates a high-quality, lossless WebP image focused on the upper or lower half of the theater."""
     target_y_indices = []
-    target_x_indices = []
     
-    # Locate coordinates of newly unblocked seats
+    # 1. Locate the Y-coordinates of the newly unblocked seats
     for y, row in enumerate(grid):
         if row["letter"] in new_seats_dict:
             new_labels = new_seats_dict[row["letter"]]
             for seat in row["seats"]:
                 if seat["label"] in new_labels:
                     target_y_indices.append(y)
-                    target_x_indices.append(seat["x"])
                     
     if not target_y_indices: return None
         
-    # Calculate cropped bounding box (Focus Effect + Context Margin)
-    min_y = max(0, min(target_y_indices) - 1)
-    max_y = min(len(grid) - 1, max(target_y_indices) + 1)
-    min_x = 0  # Always anchor 0 to show Row Letters
-    max_x = max(target_x_indices) + 3 
+    total_rows = len(grid)
+    mid_row = total_rows // 2
+    avg_y = sum(target_y_indices) / len(target_y_indices)
     
-    # Layout UI Metrics (Matching BMS CSS)
-    cell_size = 24
-    gap = 6
+    # 2. Determine Upper vs Lower Half Cropping
+    if avg_y < mid_row:
+        min_y = 0
+        max_y = min(total_rows - 1, mid_row + 1) # Upper half + slight overlap
+    else:
+        min_y = max(0, mid_row - 2) # Lower half + slight overlap
+        max_y = total_rows - 1
+
+    # 3. Find the absolute maximum width of the theater to keep formatting consistent
+    max_grid_x = 0
+    for row in grid:
+        for seat in row["seats"]:
+            max_grid_x = max(max_grid_x, seat["x"])
+            
+    min_x = 0
+    max_x = max_grid_x
+    
+    # 4. High-Quality UI Metrics
+    cell_size = 32
+    gap = 8
     step = cell_size + gap
-    width = (max_x - min_x + 2) * step + 20
-    height = (max_y - min_y + 1) * step + 20
+    width = (max_x - min_x + 2) * step + 40
+    height = (max_y - min_y + 1) * step + 40
     
     img = Image.new("RGB", (width, height), "#FFFFFF")
     draw = ImageDraw.Draw(img)
     
-    try: font = ImageFont.truetype("arial.ttf", 10)
-    except: font = ImageFont.load_default()
+    # Attempt to load a clean sans-serif font, fallback if unavailable
+    try: 
+        font = ImageFont.truetype("arial.ttf", 13)
+        row_font = ImageFont.truetype("arial.ttf", 15)
+    except: 
+        font = ImageFont.load_default()
+        row_font = font
         
-    # Draw Layer
+    # 5. Draw Layer
     for y in range(min_y, max_y + 1):
         row = grid[y]
         row_letter = row["letter"]
-        draw_y = (y - min_y) * step + 10
+        draw_y = (y - min_y) * step + 20
         
         if row_letter:
-            draw.text((10, draw_y + 12), row_letter, fill="#000000", font=font, anchor="lm")
+            draw.text((20, draw_y + (cell_size//2)), row_letter, fill="#000000", font=row_font, anchor="lm")
         
         for seat in row["seats"]:
             sx = seat["x"]
-            if sx > max_x: continue
+            draw_x = (sx - min_x + 1) * step + 20
             
-            draw_x = (sx - min_x + 1) * step + 10
             rect = [draw_x, draw_y, draw_x + cell_size, draw_y + cell_size]
-            is_newly_unblocked = row_letter in new_seats_dict and seat["label"] in new_seats_dict[row_letter]
             
-            if is_newly_unblocked:
-                # Target Focus: Bold Green outline with tinted fill
-                draw.rounded_rectangle(rect, radius=3, outline="#26C281", width=2, fill="#E9F9F1")
-                draw.text((draw_x + 12, draw_y + 12), seat["label"], fill="#26C281", font=font, anchor="mm")
-            elif seat["available"]:
-                # Old Available: Muted thin green, transparent fill
-                draw.rounded_rectangle(rect, radius=3, outline="#A5E0C2", width=1, fill="#FFFFFF")
-                draw.text((draw_x + 12, draw_y + 12), seat["label"], fill="#A5E0C2", font=font, anchor="mm")
+            if seat["available"]:
+                # Available Seat: Vibrant Green Border, White Fill, Dark Text
+                draw.rounded_rectangle(rect, radius=4, outline="#2DC492", width=2, fill="#FFFFFF")
+                draw.text((draw_x + (cell_size//2), draw_y + (cell_size//2)), seat["label"], fill="#555555", font=font, anchor="mm")
             else:
-                # Booked: Greyed out
-                draw.rounded_rectangle(rect, radius=3, outline="#EEEEEE", width=1, fill="#EEEEEE")
-                draw.text((draw_x + 12, draw_y + 12), seat["label"], fill="#999999", font=font, anchor="mm")
+                # Booked Seat: Solid Grey Fill, White Text
+                draw.rounded_rectangle(rect, radius=4, outline="#E5E5E5", width=1, fill="#E5E5E5")
+                draw.text((draw_x + (cell_size//2), draw_y + (cell_size//2)), seat["label"], fill="#FFFFFF", font=font, anchor="mm")
                 
-    # Compress directly to RAM
+    # 6. Compress directly to RAM (Lossless prevents pixelation)
     buf = io.BytesIO()
-    img.save(buf, format="WEBP", quality=90)
+    img.save(buf, format="WEBP", lossless=True, quality=100)
     return buf.getvalue()
 
 def humanize_date(date_str):
