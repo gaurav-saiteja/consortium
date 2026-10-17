@@ -201,9 +201,9 @@ def render_seat_image(grid, new_seats_dict):
     # 2. Dynamic Half-Screen Cropping
     if avg_y < mid_row:
         min_y = 0
-        max_y = min(total_rows - 1, int(mid_row + 1)) # Upper half + 1 row overlap
+        max_y = min(total_rows - 1, int(mid_row + 2)) # Upper half + 1 row overlap
     else:
-        min_y = max(0, int(mid_row - 2)) # Lower half + 1 row overlap
+        min_y = max(0, int(mid_row - 3)) # Lower half + 1 row overlap
         max_y = total_rows - 1
 
     # Find the maximum X coordinate to determine image width
