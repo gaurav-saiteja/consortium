@@ -336,12 +336,16 @@ def session_poller_thread(session, start_time, state_queue, notif_queue, initial
 def fetch_sessions():
     sessions = []
     seen_session_ids = set()
+    
+    # Initialize a local network state for the discovery phase
+    local_network = {"state": 0}
 
     for date_code in DATES:
         time.sleep(3)
         url = f"https://in.bookmyshow.com/api/v3/mobile/showtimes/byvenue?appCode=MOBAND2&venueCode={VENUE_CODE}&dateCode={date_code}"
         
-        resp = make_bms_request('GET', url)
+        # Pass the local_network state
+        resp = make_bms_request('GET', url, network_state=local_network)
         if not resp or resp.status_code != 200:
             print(f"    -> Failed fetching showtimes for {date_code}.")
             continue
@@ -387,11 +391,12 @@ def fetch_sessions():
             
     return sessions
 
-def fetch_seat_layout(session_id):
+def fetch_seat_layout(session_id, network_state):
     url = "https://services-in.bookmyshow.com/doTrans.aspx"
     payload = f"strParam4=&strParam5=Y&strParam6=&strParam7=N&strParam1={session_id}&strParam2=WEB&strParam3=&strVenueCode={VENUE_CODE}&lngTransactionIdentifier=0&strAppCode=MOBAND2&strFormat=json&strCommand=GETSEATLAYOUT"
     
-    resp = make_bms_request('POST', url, data=payload)
+    # Pass network_state explicitly to the request handler
+    resp = make_bms_request('POST', url, network_state=network_state, data=payload)
     if not resp or resp.status_code != 200:
         return ""
         
@@ -440,6 +445,10 @@ def main():
     print("==================================================")
     print("🚀 STARTING BMS SEAT SCRAPER")
     print("==================================================")
+    
+    # 1. Pre-warm WARP FIRST, so fetch_sessions can safely rotate IPs if needed
+    start_warp()
+
     print("Fetching valid sessions...")
     target_sessions = fetch_sessions()
     
@@ -450,9 +459,6 @@ def main():
     if total_sessions == 0:
         print("No valid sessions found. Exiting.")
         return
-
-    # 1. Pre-warm WARP
-    start_warp()
 
     # 2. Setup Queues and Workers
     notif_queue = queue.Queue()
