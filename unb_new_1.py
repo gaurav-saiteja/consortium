@@ -5,15 +5,17 @@ import json
 import os
 import re
 import random
+import io
+from PIL import Image, ImageDraw, ImageFont
 import subprocess
 from datetime import datetime
 
 # --- CONFIGURATION ---
-DATES = ["20261018"]
+DATES = ["20261019"]
 VENUE_CODE = "PRHN"
 TARGET_MOVIE = "jailer"     
 TARGET_SCREEN = "4"
-STATE_FILE = "third_day_state.json"
+STATE_FILE = "thirdd_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60)
 
 user_agents = [
@@ -134,6 +136,116 @@ def matches_screen(screen_name, target_screen):
     target_digits = re.findall(r'\d+', str(target_screen))
     return bool(screen_digits and target_digits and screen_digits[0] == target_digits[0])
 
+def parse_grid_data(str_data):
+    """Parses the raw layout string into a 2D grid preserving exact spatial coordinates."""
+    grid = []
+    if not str_data: return grid
+    
+    parts = str_data.split("||")
+    rows_data = parts[1] if len(parts) > 1 else parts[0]
+    rows = rows_data.split("|")
+    
+    for row in rows:
+        if not row or ":" not in row: continue
+        elements = row.split(":")
+        if len(elements) < 3: continue
+        
+        row_letter = elements[1]
+        is_valid_row = row_letter.isalpha()
+        
+        row_data = {"letter": row_letter if is_valid_row else "", "seats": []}
+        x_index = 0
+        
+        for item in elements[2:]:
+            if item == "A000": 
+                continue # Ignore start marker
+            if item == "A0+0":
+                x_index += 1 # Empty space (aisle gap)
+            else:
+                # Capture availability (1,4) or booked (2), and seat label
+                match = re.search(r"[A-Z]([124])\d*\+(\d+)", item)
+                if match:
+                    status, label = match.groups()
+                    row_data["seats"].append({
+                        "x": x_index,
+                        "label": label,
+                        "available": status in ['1', '4']
+                    })
+                    x_index += 1
+        grid.append(row_data)
+    return grid
+
+
+def render_seat_image(grid, new_seats_dict):
+    """Creates a native, in-memory WebP image focused specifically on the newly unblocked clusters."""
+    target_y_indices = []
+    target_x_indices = []
+    
+    # Locate coordinates of newly unblocked seats
+    for y, row in enumerate(grid):
+        if row["letter"] in new_seats_dict:
+            new_labels = new_seats_dict[row["letter"]]
+            for seat in row["seats"]:
+                if seat["label"] in new_labels:
+                    target_y_indices.append(y)
+                    target_x_indices.append(seat["x"])
+                    
+    if not target_y_indices: return None
+        
+    # Calculate cropped bounding box (Focus Effect + Context Margin)
+    min_y = max(0, min(target_y_indices) - 1)
+    max_y = min(len(grid) - 1, max(target_y_indices) + 1)
+    min_x = 0  # Always anchor 0 to show Row Letters
+    max_x = max(target_x_indices) + 3 
+    
+    # Layout UI Metrics (Matching BMS CSS)
+    cell_size = 24
+    gap = 6
+    step = cell_size + gap
+    width = (max_x - min_x + 2) * step + 20
+    height = (max_y - min_y + 1) * step + 20
+    
+    img = Image.new("RGB", (width, height), "#FFFFFF")
+    draw = ImageDraw.Draw(img)
+    
+    try: font = ImageFont.truetype("arial.ttf", 10)
+    except: font = ImageFont.load_default()
+        
+    # Draw Layer
+    for y in range(min_y, max_y + 1):
+        row = grid[y]
+        row_letter = row["letter"]
+        draw_y = (y - min_y) * step + 10
+        
+        if row_letter:
+            draw.text((10, draw_y + 12), row_letter, fill="#000000", font=font, anchor="lm")
+        
+        for seat in row["seats"]:
+            sx = seat["x"]
+            if sx > max_x: continue
+            
+            draw_x = (sx - min_x + 1) * step + 10
+            rect = [draw_x, draw_y, draw_x + cell_size, draw_y + cell_size]
+            is_newly_unblocked = row_letter in new_seats_dict and seat["label"] in new_seats_dict[row_letter]
+            
+            if is_newly_unblocked:
+                # Target Focus: Bold Green outline with tinted fill
+                draw.rounded_rectangle(rect, radius=3, outline="#26C281", width=2, fill="#E9F9F1")
+                draw.text((draw_x + 12, draw_y + 12), seat["label"], fill="#26C281", font=font, anchor="mm")
+            elif seat["available"]:
+                # Old Available: Muted thin green, transparent fill
+                draw.rounded_rectangle(rect, radius=3, outline="#A5E0C2", width=1, fill="#FFFFFF")
+                draw.text((draw_x + 12, draw_y + 12), seat["label"], fill="#A5E0C2", font=font, anchor="mm")
+            else:
+                # Booked: Greyed out
+                draw.rounded_rectangle(rect, radius=3, outline="#EEEEEE", width=1, fill="#EEEEEE")
+                draw.text((draw_x + 12, draw_y + 12), seat["label"], fill="#999999", font=font, anchor="mm")
+                
+    # Compress directly to RAM
+    buf = io.BytesIO()
+    img.save(buf, format="WEBP", quality=90)
+    return buf.getvalue()
+
 def humanize_date(date_str):
     dt = datetime.strptime(date_str, "%Y%m%d")
     day = dt.day
@@ -214,16 +326,33 @@ def save_state(deltas, commit_msg="Update seat state"):
     print("[GIT] ❌ Failed to push after 3 attempts. Local memory updated with last known merge.")
     return latest_state
 
-def trigger_ntfy(message):
-    print(f"\n[!] ALERTING VIA NTFY: {message}")
+def trigger_ntfy(message, image_bytes=None):
+    print(f"\n[!] ALERTING VIA NTFY: {message.replace(chr(10), ' | ')}")
+    
+    headers = {
+        "Priority": "urgent",
+        "Title": "🚨 DOLBY SEATS UNBLOCKED!"
+    }
+    
     for i in range(1):
         try:
-            resp = requests.post(
-                "https://ntfy.sh/dolby_unblock",
-                data=message.encode('utf-8'),
-                headers={"Priority": "urgent"},
-                timeout=10
-            )
+            if image_bytes:
+                # Pass image binary as data body; pass text in safe inline format
+                headers["Message"] = message.replace('\n', ' | ')
+                headers["Filename"] = "seats.webp"
+                resp = requests.post(
+                    "https://ntfy.sh/dolby_unblock",
+                    data=image_bytes,
+                    headers=headers,
+                    timeout=10
+                )
+            else:
+                resp = requests.post(
+                    "https://ntfy.sh/dolby_unblock",
+                    data=message.encode('utf-8'),
+                    headers=headers,
+                    timeout=10
+                )
             print(f"    -> Ntfy ping {i+1}/1 sent! Status: {resp.status_code}")
         except Exception as e:
             print(f"    -> Ntfy ping {i+1} failed: {e}")
@@ -459,13 +588,28 @@ def main():
                         human_date = humanize_date(s_date)
                         movie_name = session.get("movieTitle", TARGET_MOVIE)
                         screen_label = session.get("screenName", f"Screen {TARGET_SCREEN}")
-
+                    
                         msg = (
                             f"[{newly_unblocked_count}] {movie_name} ({screen_label})\n"
                             f"Rows: {rows_str}\n\n"
                             f"{human_date}, {s_time}"
                         )
-                        trigger_ntfy(msg)
+                        
+                        print("    -> Rendering and compressing in-memory seat layout map...")
+                        try:
+                            # Reconstruct the exact newly opened seats for the renderer map
+                            new_seats_dict = {}
+                            for r in unblocked_rows_list:
+                                old_seats_in_row = previous_rows.get(r, [])
+                                cur_seats_in_row = current_seats.get(r, [])
+                                new_seats_dict[r] = set(cur_seats_in_row) - set(old_seats_in_row)
+                                
+                            grid_data = parse_grid_data(str_data)
+                            img_bytes = render_seat_image(grid_data, new_seats_dict)
+                            trigger_ntfy(msg, image_bytes=img_bytes)
+                        except Exception as e:
+                            print(f"    -> ⚠️ Failed to render UI image: {e}")
+                            trigger_ntfy(msg) # Fallback to standard text push if Pillow fails
                     else:
                         print(f"    -> 🟡 Less than 3 seats unblocked ({newly_unblocked_count}). Skipping notification.")
                 
