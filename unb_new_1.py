@@ -331,14 +331,12 @@ def trigger_ntfy(message, image_bytes=None):
     
     headers = {
         "Priority": "urgent",
-        "Title": "🚨 DOLBY SEATS UNBLOCKED!"
     }
     
     for i in range(1):
         try:
             if image_bytes:
-                # Pass image binary as data body; pass text in safe inline format
-                headers["Message"] = message.replace('\n', ' | ')
+                headers["Message"] = message.replace('\n', ' | ').encode('utf-8')
                 headers["Filename"] = "seats.webp"
                 resp = requests.post(
                     "https://ntfy.sh/dolby_unblock",
