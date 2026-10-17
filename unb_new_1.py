@@ -6,6 +6,7 @@ import os
 import re
 import random
 import io
+import urllib.request
 from PIL import Image, ImageDraw, ImageFont
 import subprocess
 from datetime import datetime
@@ -234,38 +235,24 @@ def render_seat_image(grid, new_seats_dict):
     img = Image.new("RGB", (width, height), "#FFFFFF")
     draw = ImageDraw.Draw(img)
     
-    # 4. Robust Font Loading (Targeting GitHub Actions Ubuntu Runners & Windows fallback)
-    bold_font_paths = [
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
-        "C:\\Windows\\Fonts\\arialbd.ttf",
-        "arial.ttf"
-    ]
+    # 4. Enforce Roboto Font (Auto-download if missing to guarantee OS compatibility)
+    roboto_reg_path = "Roboto-Regular.ttf"
+    roboto_bold_path = "Roboto-Medium.ttf"
     
-    regular_font_paths = [
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
-        "C:\\Windows\\Fonts\\arial.ttf",
-        "arial.ttf"
-    ]
-    
-    font = None
-    for path in regular_font_paths:
-        try:
-            font = ImageFont.truetype(path, 11 * SCALE)
-            break
-        except: pass
-    if not font: font = ImageFont.load_default()
+    # Download directly from Google's official font repository if not cached
+    if not os.path.exists(roboto_reg_path):
+        urllib.request.urlretrieve("https://raw.githubusercontent.com/googlefonts/roboto/main/src/hinted/Roboto-Regular.ttf", roboto_reg_path)
+    if not os.path.exists(roboto_bold_path):
+        urllib.request.urlretrieve("https://raw.githubusercontent.com/googlefonts/roboto/main/src/hinted/Roboto-Medium.ttf", roboto_bold_path)
         
-    row_font = None
-    for path in bold_font_paths:
-        try:
-            row_font = ImageFont.truetype(path, 13 * SCALE)
-            break
-        except: pass
-    if not row_font: row_font = font
+    try:
+        # Load the newly cached Roboto fonts
+        font = ImageFont.truetype(roboto_reg_path, 11 * SCALE)
+        row_font = ImageFont.truetype(roboto_bold_path, 13 * SCALE) # Using Medium weight for row letters to match BMS
+    except Exception as e:
+        print(f"    -> ⚠️ Font load error: {e}. Falling back to default.")
+        font = ImageFont.load_default()
+        row_font = font
         
     # 5. Drawing Loop
     for y in range(min_y, max_y + 1):
