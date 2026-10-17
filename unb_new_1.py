@@ -288,7 +288,7 @@ def render_seat_image(grid, new_seats_dict):
                 draw.text(center_pt, seat["label"], fill=COLOR_BOOKED_TEXT, font=font, anchor="mm")
                 
     # 6. Apply Anti-Aliasing (Downsample back to 1X scale using high-quality Lanczos filter)
-    img = img.resize((width // SCALE, height // SCALE), Image.Resampling.LANCZOS)
+    img = img.resize((width // 2, height // 2), Image.Resampling.LANCZOS)
     
     # 7. Compress to RAM
     buf = io.BytesIO()
