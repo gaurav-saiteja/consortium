@@ -198,7 +198,7 @@ def toggle_warp():
     else:
         print("    -> 🚨 [IP ROTATION] WARP is currently OFF. Connecting to WARP (Switching to Cloudflare Proxy)...")
         subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-        time.sleep(5)  # Wait for the tunnel to establish
+        time.sleep(3)  # Wait for the tunnel to establish
         USE_WARP = True
 
 def make_bms_request(method, url, max_retries=3, **kwargs):
@@ -381,7 +381,7 @@ def main():
             
             print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Date: {s_date} Time: {s_time})")
             print("    -> Sleeping for 30 seconds (Rate Limit Prevention)...")
-            time.sleep(10) 
+            time.sleep(5) 
             
             str_data = fetch_seat_layout(s_id)
             if not str_data:
