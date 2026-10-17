@@ -177,7 +177,10 @@ def parse_grid_data(str_data):
 
 
 def render_seat_image(grid, new_seats_dict):
-    """Creates a high-quality, lossless WebP image focused on the upper or lower half of the theater."""
+    """
+    Renders a pixel-perfect, 4X supersampled WebP image of the seat layout.
+    Focuses dynamically on the upper or lower half based on unblocked seat coordinates.
+    """
     target_y_indices = []
     
     # 1. Locate the Y-coordinates of the newly unblocked seats
@@ -191,69 +194,116 @@ def render_seat_image(grid, new_seats_dict):
     if not target_y_indices: return None
         
     total_rows = len(grid)
-    mid_row = total_rows // 2
+    mid_row = total_rows / 2.0
     avg_y = sum(target_y_indices) / len(target_y_indices)
     
-    # 2. Determine Upper vs Lower Half Cropping
+    # 2. Dynamic Half-Screen Cropping
     if avg_y < mid_row:
         min_y = 0
-        max_y = min(total_rows - 1, mid_row + 1) # Upper half + slight overlap
+        max_y = min(total_rows - 1, int(mid_row + 1)) # Upper half + 1 row overlap
     else:
-        min_y = max(0, mid_row - 2) # Lower half + slight overlap
+        min_y = max(0, int(mid_row - 2)) # Lower half + 1 row overlap
         max_y = total_rows - 1
 
-    # 3. Find the absolute maximum width of the theater to keep formatting consistent
+    # Find the maximum X coordinate to determine image width
     max_grid_x = 0
     for row in grid:
         for seat in row["seats"]:
             max_grid_x = max(max_grid_x, seat["x"])
             
-    min_x = 0
-    max_x = max_grid_x
+    # 3. Supersampling Engine (4X Scale) for flawless Anti-Aliasing
+    SCALE = 4
     
-    # 4. High-Quality UI Metrics
-    cell_size = 32
-    gap = 8
-    step = cell_size + gap
-    width = (max_x - min_x + 2) * step + 40
-    height = (max_y - min_y + 1) * step + 40
+    # UI Layout Metrics (Mimicking BMS CSS)
+    CELL_SIZE = 26 * SCALE
+    GAP = 7 * SCALE
+    STEP = CELL_SIZE + GAP
+    BORDER_RADIUS = 4 * SCALE
+    BORDER_WIDTH = int(1.5 * SCALE)
+    
+    # Exact BookMyShow Color Palette
+    COLOR_AVAILABLE_OUTLINE = "#21B551" # Vibrant BMS Emerald
+    COLOR_AVAILABLE_TEXT = "#4A4A4A"    # Dark Grey
+    COLOR_BOOKED_FILL = "#E6E6E6"       # Light Grey
+    COLOR_BOOKED_TEXT = "#FFFFFF"       # White
+    COLOR_ROW_TEXT = "#000000"          # Black
+    
+    width = (max_grid_x + 2) * STEP + (40 * SCALE)
+    height = (max_y - min_y + 1) * STEP + (40 * SCALE)
     
     img = Image.new("RGB", (width, height), "#FFFFFF")
     draw = ImageDraw.Draw(img)
     
-    # Attempt to load a clean sans-serif font, fallback if unavailable
-    try: 
-        font = ImageFont.truetype("arial.ttf", 13)
-        row_font = ImageFont.truetype("arial.ttf", 15)
-    except: 
-        font = ImageFont.load_default()
-        row_font = font
+    # 4. Robust Font Loading (Targeting GitHub Actions Ubuntu Runners & Windows fallback)
+    bold_font_paths = [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+        "C:\\Windows\\Fonts\\arialbd.ttf",
+        "arial.ttf"
+    ]
+    
+    regular_font_paths = [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "arial.ttf"
+    ]
+    
+    font = None
+    for path in regular_font_paths:
+        try:
+            font = ImageFont.truetype(path, 11 * SCALE)
+            break
+        except: pass
+    if not font: font = ImageFont.load_default()
         
-    # 5. Draw Layer
+    row_font = None
+    for path in bold_font_paths:
+        try:
+            row_font = ImageFont.truetype(path, 13 * SCALE)
+            break
+        except: pass
+    if not row_font: row_font = font
+        
+    # 5. Drawing Loop
     for y in range(min_y, max_y + 1):
         row = grid[y]
         row_letter = row["letter"]
-        draw_y = (y - min_y) * step + 20
+        draw_y = (y - min_y) * STEP + (20 * SCALE)
         
+        # Row Alphabet (Left-Middle anchor for perfect vertical centering)
         if row_letter:
-            draw.text((20, draw_y + (cell_size//2)), row_letter, fill="#000000", font=row_font, anchor="lm")
+            draw.text(
+                (20 * SCALE, draw_y + (CELL_SIZE // 2)), 
+                row_letter, 
+                fill=COLOR_ROW_TEXT, 
+                font=row_font, 
+                anchor="lm"
+            )
         
         for seat in row["seats"]:
             sx = seat["x"]
-            draw_x = (sx - min_x + 1) * step + 20
+            # +1 shift to the right to leave space for the Row Alphabets
+            draw_x = (sx + 1) * STEP + (20 * SCALE) 
             
-            rect = [draw_x, draw_y, draw_x + cell_size, draw_y + cell_size]
+            rect = [draw_x, draw_y, draw_x + CELL_SIZE, draw_y + CELL_SIZE]
+            
+            # center_pt coordinates for "mm" (Middle-Middle) absolute center text alignment
+            center_pt = (draw_x + (CELL_SIZE // 2), draw_y + (CELL_SIZE // 2)) 
             
             if seat["available"]:
-                # Available Seat: Vibrant Green Border, White Fill, Dark Text
-                draw.rounded_rectangle(rect, radius=4, outline="#2DC492", width=2, fill="#FFFFFF")
-                draw.text((draw_x + (cell_size//2), draw_y + (cell_size//2)), seat["label"], fill="#555555", font=font, anchor="mm")
+                draw.rounded_rectangle(rect, radius=BORDER_RADIUS, outline=COLOR_AVAILABLE_OUTLINE, width=BORDER_WIDTH, fill="#FFFFFF")
+                draw.text(center_pt, seat["label"], fill=COLOR_AVAILABLE_TEXT, font=font, anchor="mm")
             else:
-                # Booked Seat: Solid Grey Fill, White Text
-                draw.rounded_rectangle(rect, radius=4, outline="#E5E5E5", width=1, fill="#E5E5E5")
-                draw.text((draw_x + (cell_size//2), draw_y + (cell_size//2)), seat["label"], fill="#FFFFFF", font=font, anchor="mm")
+                draw.rounded_rectangle(rect, radius=BORDER_RADIUS, outline=COLOR_BOOKED_FILL, width=BORDER_WIDTH, fill=COLOR_BOOKED_FILL)
+                draw.text(center_pt, seat["label"], fill=COLOR_BOOKED_TEXT, font=font, anchor="mm")
                 
-    # 6. Compress directly to RAM (Lossless prevents pixelation)
+    # 6. Apply Anti-Aliasing (Downsample back to 1X scale using high-quality Lanczos filter)
+    img = img.resize((width // SCALE, height // SCALE), Image.Resampling.LANCZOS)
+    
+    # 7. Compress to RAM
     buf = io.BytesIO()
     img.save(buf, format="WEBP", lossless=True, quality=100)
     return buf.getvalue()
