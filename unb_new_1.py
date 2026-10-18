@@ -6,6 +6,8 @@ import os
 import re
 import random
 import io
+from supabase import create_client, Client
+import base64
 import urllib.request
 from PIL import Image, ImageDraw, ImageFont
 import subprocess
@@ -18,6 +20,10 @@ TARGET_MOVIE = "jailer"
 TARGET_SCREEN = "4"
 STATE_FILE = "thirddd_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60)
+
+SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkcXhhZnlxcWtoeHVpcHpjamNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyOTYzNzIsImV4cCI6MjEwMjg3MjM3Mn0.dAerrc1sTh8CSnY6vZ4NtuvPXWNwjsHCl9gWZ436MLk"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 user_agents = [
     "Mozilla/5.0 (Linux; U; Android 16;zh-cn; TB375FC Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.7389.0 MobileLenovoBrowser/9.2.7 Mobile Safari/537.36",
@@ -654,6 +660,18 @@ def main():
                             grid_data = parse_grid_data(str_data)
                             img_bytes = render_seat_image(grid_data, new_seats_dict)
                             trigger_ntfy(msg, image_bytes=img_bytes)
+                            # Convert raw WebP bytes to a Base64 string
+                            b64_string = base64.b64encode(img_bytes).decode('utf-8')
+                            
+                            # Inject directly into the Supabase queue
+                            try:
+                                supabase.table("staged_tweets").insert({
+                                    "tweet_text": msg,
+                                    "image_base64": b64_string
+                                }).execute()
+                                print("    -> 🚀 Tweet successfully staged in Supabase!")
+                            except Exception as e:
+                                print(f"    -> ⚠️ Failed to stage tweet in Supabase: {e}")
                         except Exception as e:
                             print(f"    -> ⚠️ Failed to render UI image: {e}")
                             trigger_ntfy(msg) # Fallback to standard text push if Pillow fails
