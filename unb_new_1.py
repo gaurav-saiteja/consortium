@@ -12,11 +12,11 @@ import subprocess
 from datetime import datetime
 
 # --- CONFIGURATION ---
-DATES = ["20261019"]
+DATES = ["20261018"]
 VENUE_CODE = "PRHN"
 TARGET_MOVIE = "jailer"     
-TARGET_SCREEN = "6"
-STATE_FILE = "thirdd_day_state.json"
+TARGET_SCREEN = "4"
+STATE_FILE = "thirddd_day_state.json"
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60)
 
 user_agents = [
@@ -225,7 +225,7 @@ def render_seat_image(grid, new_seats_dict):
     # Exact BookMyShow Color Palette
     COLOR_AVAILABLE_OUTLINE = "#1FAD3E" # Vibrant BMS Emerald
     COLOR_AVAILABLE_TEXT = "#454545"    # Dark Grey
-    COLOR_BOOKED_FILL = "#E5E5E5"       # Light Grey
+    COLOR_BOOKED_FILL = "#C1C1C1" #"#E5E5E5"    
     COLOR_BOOKED_TEXT = "#F9F9F9"       # White
     COLOR_ROW_TEXT = "#2A2A2A"          # Black
     
