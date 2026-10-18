@@ -14,7 +14,7 @@ import subprocess
 from datetime import datetime
 
 # --- CONFIGURATION ---
-DATES = ["20261018"]
+DATES = ["20261019"]
 VENUE_CODE = "PRHN"
 TARGET_MOVIE = "jailer"     
 TARGET_SCREEN = "4"
