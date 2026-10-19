@@ -381,12 +381,15 @@ def save_state(deltas, commit_msg="Update seat state"):
     print("[GIT] ❌ Failed to push after 3 attempts. Local memory updated with last known merge.")
     return latest_state
 
-def trigger_ntfy(message, image_bytes=None):
+def trigger_ntfy(message, image_bytes=None, click_url=None): # MODIFIED
     print(f"\n[!] ALERTING VIA NTFY: {message.replace(chr(10), ' | ')}")
     
     headers = {
         "Priority": "urgent",
     }
+
+    if click_url:                    
+        headers["Click"] = click_url 
     
     for i in range(1):
         try:
@@ -490,6 +493,7 @@ def fetch_sessions():
                         continue
                         
                     for child in child_events:
+                        event_code = child.get("EventCode", "") # ADD THIS LINE
                         for show in child.get("ShowTimes", []):
                             session_id = show.get("SessionId")
                             screen_name = show.get("ScreenName", "")
@@ -501,7 +505,8 @@ def fetch_sessions():
                                     "dateCode": show.get("ShowDateCode", date_code),
                                     "time": show.get("ShowTime", ""),
                                     "movieTitle": event_title,
-                                    "screenName": screen_name
+                                    "screenName": screen_name,
+                                    "eventCode": event_code
                                 })
                                 seen_session_ids.add(session_id)
                                 matched_count += 1
@@ -641,12 +646,17 @@ def main():
                         human_date = humanize_date(s_date)
                         movie_name = session.get("movieTitle", TARGET_MOVIE)
                         screen_label = session.get("screenName", f"Screen {TARGET_SCREEN}")
+                        s_event_code = session.get("eventCode", "") # ADD THIS LINE
                     
                         msg = (
                             f"[{newly_unblocked_count}] {movie_name} ({screen_label})\n"
                             f"Rows: {rows_str}\n\n"
                             f"{human_date}, {s_time}"
                         )
+                        
+                        # ADD THESE TWO LINES TO CONSTRUCT URL AND TWEET PAYLOAD
+                        seat_layout_url = f"https://in.bookmyshow.com/movies/hyderabad/seat-layout/{s_event_code}/{VENUE_CODE}/{s_id}/{s_date}"
+                        tweet_payload = f"{msg}\n\nBook Here: {seat_layout_url}"
                         
                         print("    -> Rendering and compressing in-memory seat layout map...")
                         try:
@@ -659,14 +669,16 @@ def main():
                                 
                             grid_data = parse_grid_data(str_data)
                             img_bytes = render_seat_image(grid_data, new_seats_dict)
-                            trigger_ntfy(msg, image_bytes=img_bytes)
+                            
+                            # MODIFIED: Pass the URL to ntfy
+                            trigger_ntfy(msg, image_bytes=img_bytes, click_url=seat_layout_url) 
                             # Convert raw WebP bytes to a Base64 string
                             b64_string = base64.b64encode(img_bytes).decode('utf-8')
                             
                             # Inject directly into the Supabase queue
                             try:
                                 supabase.table("staged_tweets").insert({
-                                    "tweet_text": msg,
+                                    "tweet_text": tweet_payload, # MODIFIED: Use the appended payload
                                     "image_base64": b64_string
                                 }).execute()
                                 print("    -> 🚀 Tweet successfully staged in Supabase!")
@@ -674,7 +686,8 @@ def main():
                                 print(f"    -> ⚠️ Failed to stage tweet in Supabase: {e}")
                         except Exception as e:
                             print(f"    -> ⚠️ Failed to render UI image: {e}")
-                            trigger_ntfy(msg) # Fallback to standard text push if Pillow fails
+                            # MODIFIED: Ensure the fallback ntfy push also gets the click URL
+                            trigger_ntfy(msg, click_url=seat_layout_url)
                     else:
                         print(f"    -> 🟡 Less than 3 seats unblocked ({newly_unblocked_count}). Skipping notification.")
                 
