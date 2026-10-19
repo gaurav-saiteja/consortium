@@ -1,0 +1,132 @@
+{
+  "completed_waves": 0,
+  "last_wave_finish_timestamp": 1792431598.4732454,
+  "available_seats": {
+    "6239_M_18": {
+      "session_id": "6239",
+      "row": "M",
+      "seat_num": "18",
+      "meta": {
+        "block_code": "D",
+        "row_index": "3",
+        "backend_seat": "21"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00483565",
+      "event_title": "Ranabaali",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20261021",
+      "time": "12:55 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "6239_M_19": {
+      "session_id": "6239",
+      "row": "M",
+      "seat_num": "19",
+      "meta": {
+        "block_code": "D",
+        "row_index": "3",
+        "backend_seat": "20"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00483565",
+      "event_title": "Ranabaali",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20261021",
+      "time": "12:55 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "6239_M_17": {
+      "session_id": "6239",
+      "row": "M",
+      "seat_num": "17",
+      "meta": {
+        "block_code": "D",
+        "row_index": "3",
+        "backend_seat": "22"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00483565",
+      "event_title": "Ranabaali",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20261021",
+      "time": "12:55 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "6239_M_20": {
+      "session_id": "6239",
+      "row": "M",
+      "seat_num": "20",
+      "meta": {
+        "block_code": "D",
+        "row_index": "3",
+        "backend_seat": "19"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00483565",
+      "event_title": "Ranabaali",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20261021",
+      "time": "12:55 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "6239_M_16": {
+      "session_id": "6239",
+      "row": "M",
+      "seat_num": "16",
+      "meta": {
+        "block_code": "D",
+        "row_index": "3",
+        "backend_seat": "23"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00483565",
+      "event_title": "Ranabaali",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20261021",
+      "time": "12:55 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    },
+    "6239_M_21": {
+      "session_id": "6239",
+      "row": "M",
+      "seat_num": "21",
+      "meta": {
+        "block_code": "D",
+        "row_index": "3",
+        "backend_seat": "18"
+      },
+      "c_code": "0000000005",
+      "a_id": "3",
+      "ticket_category": "0004",
+      "event_code": "ET00483565",
+      "event_title": "Ranabaali",
+      "event_language": "Telugu",
+      "event_dimension": "2D",
+      "date_code": "20261021",
+      "time": "12:55 PM",
+      "screen": "SCREEN 1",
+      "attribute": "DOLBY CINEMA"
+    }
+  }
+}
