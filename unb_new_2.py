@@ -381,17 +381,18 @@ def save_state(deltas, commit_msg="Update seat state"):
     print("[GIT] ❌ Failed to push after 3 attempts. Local memory updated with last known merge.")
     return latest_state
 
-def trigger_ntfy(message, image_bytes=None, click_url=None): # MODIFIED
+def trigger_ntfy(message, image_bytes=None, click_url=None):
     print(f"\n[!] ALERTING VIA NTFY: {message.replace(chr(10), ' | ')}")
     
     headers = {
         "Priority": "urgent",
     }
-
-    if click_url:                    
-        headers["Click"] = click_url 
     
-    for i in range(1):
+    if click_url:
+        headers["Click"] = click_url
+        
+    max_retries = 5
+    for attempt in range(max_retries):
         try:
             if image_bytes:
                 headers["Message"] = message.replace('\n', ' | ').encode('utf-8')
@@ -400,18 +401,29 @@ def trigger_ntfy(message, image_bytes=None, click_url=None): # MODIFIED
                     "https://ntfy.sh/dolby_unblock",
                     data=image_bytes,
                     headers=headers,
-                    timeout=10
+                    timeout=15
                 )
             else:
                 resp = requests.post(
                     "https://ntfy.sh/dolby_unblock",
                     data=message.encode('utf-8'),
                     headers=headers,
-                    timeout=10
+                    timeout=15
                 )
-            print(f"    -> Ntfy ping {i+1}/1 sent! Status: {resp.status_code}")
+            
+            if resp.status_code == 200:
+                print(f"    -> 🟢 Ntfy ping sent successfully on attempt {attempt + 1}!")
+                break
+            else:
+                print(f"    -> ⚠️ Ntfy attempt {attempt + 1} returned status {resp.status_code}. Retrying...")
+                
         except Exception as e:
-            print(f"    -> Ntfy ping {i+1} failed: {e}")
+            print(f"    -> ❌ Ntfy attempt {attempt + 1} failed: {e}")
+            
+        if attempt < max_retries - 1:
+            sleep_time = 2 ** attempt # Exponential backoff: 1s, 2s, 4s, 8s
+            print(f"    -> Waiting {sleep_time}s before next ntfy attempt...")
+            time.sleep(sleep_time)
 
 def toggle_warp():
     """Toggles Cloudflare WARP on/off and updates the proxy state."""
