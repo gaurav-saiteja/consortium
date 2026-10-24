@@ -14,6 +14,7 @@ import subprocess
 from datetime import datetime
 import threading
 import builtins
+import hashlib
 from collections import defaultdict
 
 # --- GLOBAL LOCKS ---
@@ -28,11 +29,18 @@ def safe_print(*args, **kwargs):
 print = safe_print
 
 # --- CONFIGURATION ---
-DATES = ["20261026","20261027", "20261028"]
-VENUE_CODE = "PRHN"
-TARGET_MOVIE = "jailer"     
-TARGET_SCREEN = "4"
-STATE_FILE = "thirddd_day_state.json"
+
+dates_env = os.getenv("DATES")
+DATES = [d.strip() for d in dates_env.split(",") if d.strip()]
+
+VENUE_CODE = os.getenv("VENUE_CODE")
+TARGET_MOVIE = os.getenv("TARGET_MOVIE")
+TARGET_SCREEN = str(os.getenv("TARGET_SCREEN"))
+
+dates_hash = hashlib.md5(dates_env.encode('utf-8')).hexdigest()[:8]
+clean_movie = "".join(c for c in TARGET_MOVIE if c.isalnum())
+STATE_FILE = f"state_{VENUE_CODE}_{clean_movie}_scr{TARGET_SCREEN}_{dates_hash}.json"
+
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60)
 
 SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
