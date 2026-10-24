@@ -28,7 +28,7 @@ def safe_print(*args, **kwargs):
 print = safe_print
 
 # --- CONFIGURATION ---
-DATES = ["20261028"]
+DATES = ["20261026","20261027", "20261028"]
 VENUE_CODE = "PRHN"
 TARGET_MOVIE = "jailer"     
 TARGET_SCREEN = "4"
