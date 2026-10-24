@@ -57,11 +57,14 @@ jobs:
 
       - name: Run Polling Script
         env:
-          BMS_EMAIL: '${{ secrets.BMS_EMAIL }}'
-          BMS_PHONE: '${{ secrets.BMS_PHONE }}'
+          # --- SECRETS ---
           NTFY_TOPIC: '${{ secrets.NTFY_TOPIC }}'
           PROXY_LIST: '${{ secrets.PROXY_LIST }}'
-          # Add the new secrets to the environment
           WORKER_URL: '${{ secrets.WORKER_URL }}'
           WORKER_PASSPHRASE: '${{ secrets.WORKER_PASSPHRASE }}'
+          
+          DATES: '20261026, 20261027, 20261028'
+          VENUE_CODE: 'PRHN'
+          TARGET_MOVIE: 'jailer'
+          TARGET_SCREEN: '4'
         run: python -u unb_new_4.py
