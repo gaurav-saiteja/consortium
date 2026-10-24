@@ -12,6 +12,20 @@ import urllib.request
 from PIL import Image, ImageDraw, ImageFont
 import subprocess
 from datetime import datetime
+import threading
+import builtins
+from collections import defaultdict
+
+# --- GLOBAL LOCKS ---
+state_lock = threading.Lock()
+warp_lock = threading.Lock()
+print_lock = threading.Lock()
+
+# Thread-safe print override
+def safe_print(*args, **kwargs):
+    with print_lock:
+        builtins.print(*args, **kwargs)
+print = safe_print
 
 # --- CONFIGURATION ---
 DATES = ["20261028"]
@@ -239,44 +253,50 @@ def read_local_state():
     return {}
 
 def load_state():
-    """Syncs with remote and loads the freshest state into memory."""
-    quiet_git_pull()
-    return read_local_state()
+    """Syncs with remote and loads the freshest state into memory (Thread-Safe)."""
+    with state_lock:
+        quiet_git_pull()
+        return read_local_state()
 
 def save_state(deltas, commit_msg="Update seat state"):
-    for attempt in range(3):
-        # 1. Force sync local repo with remote (drops any failed local commits from prior attempts)
-        quiet_git_pull()
-        
-        latest_state = read_local_state()
-        
-        for s_id, s_data in deltas.items():
-            latest_state[s_id] = s_data
-
-        with open(STATE_FILE, "w") as f:
-            json.dump(latest_state, f, indent=2)
+    """Thread-Safe save and push to Git."""
+    with state_lock:
+        for attempt in range(3):
+            # 1. Force sync local repo with remote
+            quiet_git_pull()
             
-        # 5. Commit
-        subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
-        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-        
-        if STATE_FILE in status.stdout:
-            print(f"[GIT] Committing changes to {STATE_FILE} (Attempt {attempt+1})...")
-            subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, check=False)
+            # 2. Read the newly synced remote state
+            latest_state = read_local_state()
             
-            # 6. Push
-            if quiet_git_push():
-                print(f"[GIT] Successfully pushed merged state to repository.")
-                return latest_state
+            # 3. Merge our locally tracked changes (deltas) into this state
+            for s_id, s_data in deltas.items():
+                latest_state[s_id] = s_data
+                
+            # 4. Save the merged state to disk
+            with open(STATE_FILE, "w") as f:
+                json.dump(latest_state, f, indent=2)
+                
+            # 5. Commit
+            subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+            
+            if STATE_FILE in status.stdout:
+                print(f"[GIT] Committing changes to {STATE_FILE} (Attempt {attempt+1})...")
+                subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, check=False)
+                
+                # 6. Push
+                if quiet_git_push():
+                    print(f"[GIT] Successfully pushed merged state to repository.")
+                    return latest_state
+                else:
+                    print(f"[GIT] Push attempt {attempt+1} failed (likely concurrent push). Retrying merge...")
+                    time.sleep(2)
             else:
-                print(f"[GIT] Push attempt {attempt+1} failed (likely concurrent push). Retrying merge...")
-                time.sleep(2)
-        else:
-            print("[GIT] Merged state is identical to remote. Nothing to push.")
-            return latest_state
-            
-    print("[GIT] ❌ Failed to push after 3 attempts. Local memory updated with last known merge.")
-    return latest_state
+                print("[GIT] Merged state is identical to remote. Nothing to push.")
+                return latest_state
+                
+        print("[GIT] ❌ Failed to push after 3 attempts. Local memory updated with last known merge.")
+        return latest_state
 
 def trigger_ntfy(message, image_bytes=None, click_url=None):
     print(f"\n[!] ALERTING VIA NTFY: {message.replace(chr(10), ' | ')}")
@@ -322,26 +342,154 @@ def trigger_ntfy(message, image_bytes=None, click_url=None):
             print(f"    -> Waiting {sleep_time}s before next ntfy attempt...")
             time.sleep(sleep_time)
 
-def toggle_warp():
-    """Toggles Cloudflare WARP on/off and updates the proxy state."""
+def toggle_warp(expected_warp_state):
+    """Toggles Cloudflare WARP on/off and updates proxy state (Thread-Safe)."""
     global USE_WARP
-    if USE_WARP:
-        print("    -> 🚨 [IP ROTATION] WARP is currently ON. Disconnecting WARP (Switching to Runner IP)...")
-        subprocess.run(["warp-cli", "--accept-tos", "disconnect"], capture_output=True, check=False)
-        USE_WARP = False
-    else:
-        print("    -> 🚨 [IP ROTATION] WARP is currently OFF. Connecting to WARP (Switching to Cloudflare Proxy)...")
-        subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-        time.sleep(3)  # Wait for the tunnel to establish
-        USE_WARP = True
+    with warp_lock:
+        if USE_WARP != expected_warp_state:
+            print("    -> 🚨 [IP ROTATION] WARP already toggled by another thread. Skipping.")
+            return
+            
+        if USE_WARP:
+            print("    -> 🚨 [IP ROTATION] WARP is ON. Disconnecting (Switching to Runner IP)...")
+            subprocess.run(["warp-cli", "--accept-tos", "disconnect"], capture_output=True, check=False)
+            USE_WARP = False
+        else:
+            print("    -> 🚨 [IP ROTATION] WARP is OFF. Connecting (Switching to Cloudflare Proxy)...")
+            subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
+            time.sleep(3)  # Wait for the tunnel to establish
+            USE_WARP = True
+
+def poll_date_sessions(date_code, target_sessions, start_time, is_first_run):
+    cycle_count = 1
+    total_sessions = len(target_sessions)
+    
+    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
+        print(f"\n[{date_code}] ==================================================")
+        print(f"[{date_code}] 🔄 STARTING POLLING CYCLE {cycle_count}")
+        print(f"[{date_code}] ==================================================")
+        
+        state = load_state()
+        deltas = {}
+        
+        for index, session in enumerate(target_sessions, 1):
+            s_id = session["sessionId"]
+            s_date = session["dateCode"]
+            s_time = session["time"]
+            
+            print(f"\n[{date_code} | {index}/{total_sessions}] Checking Session {s_id} (Time: {s_time})")
+            print(f"[{date_code}]    -> Sleeping for 3 seconds...")
+            time.sleep(3) 
+            
+            str_data = fetch_seat_layout(s_id)
+            if not str_data:
+                continue
+                
+            current_seats = parse_layout(str_data)
+            current_total = sum(len(seats) for seats in current_seats.values())
+            
+            print(f"[{date_code}]    -> Session [{s_id}] ({s_time}) | Available Seats: {current_total}")
+            
+            if s_id not in state:
+                state[s_id] = {"date": s_date, "time": s_time, "total": 0, "rows": {}}
+            
+            previous_total = state[s_id].get("total", 0)
+            previous_rows = state[s_id].get("rows", {})
+            
+            newly_unblocked_count = 0
+            unblocked_rows_list = []
+            
+            for row, seats in current_seats.items():
+                old_seats_in_row = previous_rows.get(row, [])
+                new_seats = set(seats) - set(old_seats_in_row)
+                
+                if new_seats:
+                    newly_unblocked_count += len(new_seats)
+                    unblocked_rows_list.append(row)
+            
+            if newly_unblocked_count > 0:
+                print(f"[{date_code}]    -> 🟢 DETECTED UNBLOCKS: +{newly_unblocked_count} new seats!")
+                
+                if not is_first_run:
+                    if newly_unblocked_count >= 3:
+                        rows_str = ", ".join(sorted(unblocked_rows_list))
+                        human_date = humanize_date(s_date)
+                        movie_name = session.get("movieTitle", TARGET_MOVIE)
+                        screen_label = session.get("screenName", f"Screen {TARGET_SCREEN}")
+                        s_event_code = session.get("eventCode", "") 
+                    
+                        msg = (
+                            f"[{newly_unblocked_count}] {movie_name} ({screen_label})\n"
+                            f"Rows: {rows_str}\n\n"
+                            f"{human_date}, {s_time}"
+                        )
+                        
+                        seat_layout_url = f"https://in.bookmyshow.com/movies/hyderabad/seat-layout/{s_event_code}/{VENUE_CODE}/{s_id}/{s_date}"
+                        tweet_payload = f"{msg}\n\nBook Here: {seat_layout_url}"
+                        
+                        print(f"[{date_code}]    -> Rendering and compressing UI layout map...")
+                        try:
+                            new_seats_dict = {}
+                            for r in unblocked_rows_list:
+                                old_seats_in_row = previous_rows.get(r, [])
+                                cur_seats_in_row = current_seats.get(r, [])
+                                new_seats_dict[r] = set(cur_seats_in_row) - set(old_seats_in_row)
+                                
+                            grid_data = parse_grid_data(str_data)
+                            img_bytes = render_seat_image(grid_data, new_seats_dict)
+                            
+                            trigger_ntfy(msg, image_bytes=img_bytes, click_url=seat_layout_url) 
+                            b64_string = base64.b64encode(img_bytes).decode('utf-8')
+                            
+                            try:
+                                supabase.table("staged_tweets").insert({
+                                    "tweet_text": tweet_payload,
+                                    "image_base64": b64_string
+                                }).execute()
+                                print(f"[{date_code}]    -> 🚀 Tweet successfully staged in Supabase!")
+                            except Exception as e:
+                                print(f"[{date_code}]    -> ⚠️ Failed to stage tweet in Supabase: {e}")
+                        except Exception as e:
+                            print(f"[{date_code}]    -> ⚠️ Failed to render UI image: {e}")
+                            trigger_ntfy(msg, click_url=seat_layout_url)
+                    else:
+                        print(f"[{date_code}]    -> 🟡 Less than 3 seats unblocked. Skipping notification.")
+                
+                state[s_id]["rows"] = current_seats
+                state[s_id]["total"] = current_total
+                deltas[s_id] = state[s_id]
+
+            elif current_total < previous_total:
+                print(f"[{date_code}]    -> 🔴 Seats booked. Total dropped from {previous_total} down to {current_total}.")
+                state[s_id]["rows"] = current_seats
+                state[s_id]["total"] = current_total
+                deltas[s_id] = state[s_id]
+                
+            else:
+                print(f"[{date_code}]    -> ⚪ No changes detected.")
+
+        if deltas:
+            print(f"\n[{date_code}] [STATE] Cycle finished. Changes detected, merging and saving...")
+            state = save_state(deltas, f"State update at cycle {cycle_count} for date {date_code}")
+        else:
+            print(f"\n[{date_code}] [STATE] Cycle finished. No changes detected.")
+            
+        if is_first_run:
+            is_first_run = False
+            print(f"[{date_code}] [STATE] First run baseline has been successfully established.")
+            
+        cycle_count += 1
 
 def make_bms_request(method, url, max_retries=9, **kwargs):
     endpoint_path = url.split("?")[0].split("/")[-1]
     is_post = method.upper() == 'POST'
 
     for attempt in range(1, max_retries + 1):
-        current_proxies = PROXIES if USE_WARP else None
-        
+        # Safely read current proxy configuration
+        with warp_lock:
+            current_proxies = PROXIES if USE_WARP else None
+            current_warp_state = USE_WARP
+            
         try:
             if is_post:
                 resp = cffi_requests.post(url, headers=BMS_HEADERS, proxies=current_proxies, impersonate="chrome", timeout=15, **kwargs)
@@ -353,7 +501,7 @@ def make_bms_request(method, url, max_retries=9, **kwargs):
             if resp.status_code in [429, 403]:
                 print(f"    -> ⚠️ Rate limited ({resp.status_code}) on attempt {attempt}/{max_retries}.")
                 if attempt < max_retries:
-                    toggle_warp()
+                    toggle_warp(current_warp_state) # Pass the state we had when the request failed
                     time.sleep(2)
                     continue
                 else:
@@ -479,7 +627,7 @@ def main():
     start_time = time.time()
     
     print("==================================================")
-    print("🚀 STARTING BMS SEAT SCRAPER")
+    print("🚀 STARTING BMS SEAT SCRAPER (MULTI-THREADED)")
     print("==================================================")
     print("Fetching valid sessions...")
     target_sessions = fetch_sessions()
@@ -496,135 +644,32 @@ def main():
     state = load_state()
     is_first_run = len(state) == 0
     if is_first_run:
-        print("[STATE] Empty state found. Initializing baseline silently...")
+        print("[STATE] Empty state found. Initializing baselines silently...")
     else:
         print(f"[STATE] Loaded existing state for {len(state)} sessions.")
 
-    cycle_count = 1
+    # Group sessions by date
+    sessions_by_date = defaultdict(list)
+    for session in target_sessions:
+        sessions_by_date[session["dateCode"]].append(session)
+        
+    print(f"\n🚀 Spawning {len(sessions_by_date)} thread(s) for monitoring...")
     
-    while (time.time() - start_time) < MAX_RUNTIME_SECONDS:
-        print(f"\n==================================================")
-        print(f"🔄 STARTING POLLING CYCLE {cycle_count}")
-        print(f"==================================================")
-        state = load_state()
-        deltas = {} # Track ONLY the sessions that change during this cycle
+    threads = []
+    for date_code, sessions in sessions_by_date.items():
+        t = threading.Thread(
+            target=poll_date_sessions, 
+            args=(date_code, sessions, start_time, is_first_run)
+        )
+        threads.append(t)
+        t.start()
         
-        for index, session in enumerate(target_sessions, 1):
-            s_id = session["sessionId"]
-            s_date = session["dateCode"]
-            s_time = session["time"]
-            
-            print(f"\n[{index}/{total_sessions}] Checking Session {s_id} (Date: {s_date} Time: {s_time})")
-            print("    -> Sleeping for 30 seconds (Rate Limit Prevention)...")
-            time.sleep(3) 
-            
-            str_data = fetch_seat_layout(s_id)
-            if not str_data:
-                continue
-                
-            current_seats = parse_layout(str_data)
-            current_total = sum(len(seats) for seats in current_seats.values())
-            
-            # Minimal seat logging
-            print(f"    -> Session [{s_id}] ({s_time}) | Available Seats: {current_total}")
-            
-            if s_id not in state:
-                state[s_id] = {"date": s_date, "time": s_time, "total": 0, "rows": {}}
-            
-            previous_total = state[s_id].get("total", 0)
-            previous_rows = state[s_id].get("rows", {})
-            
-            newly_unblocked_count = 0
-            unblocked_rows_list = []
-            
-            for row, seats in current_seats.items():
-                old_seats_in_row = previous_rows.get(row, [])
-                new_seats = set(seats) - set(old_seats_in_row)
-                
-                if new_seats:
-                    newly_unblocked_count += len(new_seats)
-                    unblocked_rows_list.append(row)
-            
-            if newly_unblocked_count > 0:
-                print(f"    -> 🟢 DETECTED UNBLOCKS: +{newly_unblocked_count} new seats!")
-                
-                if not is_first_run:
-                    if newly_unblocked_count >= 3:
-                        rows_str = ", ".join(sorted(unblocked_rows_list))
-                        human_date = humanize_date(s_date)
-                        movie_name = session.get("movieTitle", TARGET_MOVIE)
-                        screen_label = session.get("screenName", f"Screen {TARGET_SCREEN}")
-                        s_event_code = session.get("eventCode", "") # ADD THIS LINE
-                    
-                        msg = (
-                            f"[{newly_unblocked_count}] {movie_name} ({screen_label})\n"
-                            f"Rows: {rows_str}\n\n"
-                            f"{human_date}, {s_time}"
-                        )
-
-                        seat_layout_url = f"https://in.bookmyshow.com/movies/hyderabad/seat-layout/{s_event_code}/{VENUE_CODE}/{s_id}/{s_date}"
-                        tweet_payload = f"{msg}\n\nBook Here: {seat_layout_url}"
-                        
-                        print("    -> Rendering and compressing in-memory seat layout map...")
-                        try:
-                            # Reconstruct the exact newly opened seats for the renderer map
-                            new_seats_dict = {}
-                            for r in unblocked_rows_list:
-                                old_seats_in_row = previous_rows.get(r, [])
-                                cur_seats_in_row = current_seats.get(r, [])
-                                new_seats_dict[r] = set(cur_seats_in_row) - set(old_seats_in_row)
-                                
-                            grid_data = parse_grid_data(str_data)
-                            img_bytes = render_seat_image(grid_data, new_seats_dict)
-                            
-                            # MODIFIED: Pass the URL to ntfy
-                            trigger_ntfy(msg, image_bytes=img_bytes, click_url=seat_layout_url) 
-                            # Convert raw WebP bytes to a Base64 string
-                            b64_string = base64.b64encode(img_bytes).decode('utf-8')
-                            
-                            # Inject directly into the Supabase queue
-                            try:
-                                supabase.table("staged_tweets").insert({
-                                    "tweet_text": tweet_payload, # MODIFIED: Use the appended payload
-                                    "image_base64": b64_string
-                                }).execute()
-                                print("    -> 🚀 Tweet successfully staged in Supabase!")
-                            except Exception as e:
-                                print(f"    -> ⚠️ Failed to stage tweet in Supabase: {e}")
-                        except Exception as e:
-                            print(f"    -> ⚠️ Failed to render UI image: {e}")
-                            # MODIFIED: Ensure the fallback ntfy push also gets the click URL
-                            trigger_ntfy(msg, click_url=seat_layout_url)
-                    else:
-                        print(f"    -> 🟡 Less than 3 seats unblocked ({newly_unblocked_count}). Skipping notification.")
-                
-                # Update memory & Track Delta
-                state[s_id]["rows"] = current_seats
-                state[s_id]["total"] = current_total
-                deltas[s_id] = state[s_id]
-
-            elif current_total < previous_total:
-                print(f"    -> 🔴 Seats booked. Total dropped from {previous_total} down to {current_total}.")
-                state[s_id]["rows"] = current_seats
-                state[s_id]["total"] = current_total
-                deltas[s_id] = state[s_id]
-                
-            else:
-                print("    -> ⚪ No changes detected.")
-
-        if deltas:
-            print("\n[STATE] Cycle finished. Changes detected, merging and saving to Git...")
-            state = save_state(deltas, f"State update at cycle {cycle_count}")
-        else:
-            print("\n[STATE] Cycle finished. No changes detected.")
-            
-        if is_first_run:
-            is_first_run = False
-            print("[STATE] First run baseline has been successfully established.")
-            
-        cycle_count += 1
+    # Wait for all threads to finish (which takes MAX_RUNTIME_SECONDS)
+    for t in threads:
+        t.join()
         
-    print("\n🏁 Time limit reached (5h 55m). Gracefully shutting down.")
+    print("\n🏁 All threads finished. Time limit reached. Gracefully shutting down.")
+
 
 if __name__ == "__main__":
     main()
