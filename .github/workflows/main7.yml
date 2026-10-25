@@ -40,7 +40,7 @@ jobs:
           # --- STATIC CONFIGURATION ---
           DATES: '20261105, 20261106, 20261107, 20261108'
           VENUE_CODE: 'PRHN'
-          TARGET_MOVIE: 'rama'
+          TARGET_MOVIE: 'jailer'
           TARGET_SCREEN: '6'
           IGNORE_ROWS: 'A, B, C, D, E, F'
         run: |
