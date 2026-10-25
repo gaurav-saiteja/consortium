@@ -38,7 +38,7 @@ jobs:
           WORKER_PASSPHRASE: '${{ secrets.WORKER_PASSPHRASE }}'
           
           # --- STATIC CONFIGURATION ---
-          DATES: '20261103, 20261104, 20261105'
+          DATES: '20261026, 20261027'
           VENUE_CODE: 'PRHN'
           TARGET_MOVIE: 'rama'
           TARGET_SCREEN: '6'
