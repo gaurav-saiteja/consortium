@@ -42,6 +42,7 @@ jobs:
           VENUE_CODE: 'PRHN'
           TARGET_MOVIE: 'jailer'
           TARGET_SCREEN: '4'
+          IGNORE_ROWS: 'H, I, J, K, L, M, N'
         run: |
           mkdir -p ~/.fast-cache/warp-debs ~/.fast-cache/fonts
 
