@@ -63,7 +63,7 @@ jobs:
           WORKER_URL: '${{ secrets.WORKER_URL }}'
           WORKER_PASSPHRASE: '${{ secrets.WORKER_PASSPHRASE }}'
           
-          DATES: '20261026, 20261027, 20261028'
+          DATES: '20261101, 20261102, 20261103'
           VENUE_CODE: 'PRHN'
           TARGET_MOVIE: 'jailer'
           TARGET_SCREEN: '4'
