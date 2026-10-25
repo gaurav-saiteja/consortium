@@ -1,4 +1,42 @@
 {
   "20261103": {},
-  "20261104": {}
+  "20261104": {},
+  "20261105": {
+    "258050": {
+      "time": "07:45 AM",
+      "eventName": "Namit Malhotra's Ramayana (3D)(Hindi) - Hindi",
+      "screenName": "SCREEN 6",
+      "attributes": "PCX Screen"
+    },
+    "258052": {
+      "time": "03:25 PM",
+      "eventName": "Namit Malhotra's Ramayana (3D)(Hindi) - Hindi",
+      "screenName": "SCREEN 6",
+      "attributes": "PCX Screen"
+    },
+    "258054": {
+      "time": "11:05 PM",
+      "eventName": "Namit Malhotra's Ramayana (3D)(Hindi) - Hindi",
+      "screenName": "SCREEN 6",
+      "attributes": "PCX Screen"
+    },
+    "258098": {
+      "time": "08:00 AM",
+      "eventName": "Namit Malhotra's Ramayana (Telugu) - Telugu",
+      "screenName": "SCREEN 5",
+      "attributes": ""
+    },
+    "258051": {
+      "time": "11:35 AM",
+      "eventName": "Namit Malhotra's Ramayana (3D)(Telugu) - Telugu",
+      "screenName": "SCREEN 6",
+      "attributes": "PCX Screen"
+    },
+    "258053": {
+      "time": "07:15 PM",
+      "eventName": "Namit Malhotra's Ramayana (3D)(Telugu) - Telugu",
+      "screenName": "SCREEN 6",
+      "attributes": "PCX Screen"
+    }
+  }
 }
