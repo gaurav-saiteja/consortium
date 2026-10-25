@@ -5,6 +5,8 @@ import json
 import os
 import re
 import random
+import signal
+import copy
 import io
 import base64
 import urllib.request
@@ -36,11 +38,17 @@ VENUE_CODE = os.getenv("VENUE_CODE")
 TARGET_MOVIE = os.getenv("TARGET_MOVIE")
 TARGET_SCREEN = str(os.getenv("TARGET_SCREEN"))
 
+ignore_rows_env = os.getenv("IGNORE_ROWS", "")
+IGNORE_ROWS = {r.strip().upper() for r in ignore_rows_env.split(",") if r.strip()}
+
 dates_hash = hashlib.md5(dates_env.encode('utf-8')).hexdigest()[:8]
 clean_movie = "".join(c for c in TARGET_MOVIE if c.isalnum())
 STATE_FILE = f"state_{VENUE_CODE}_{clean_movie}_scr{TARGET_SCREEN}_{dates_hash}.json"
 
 MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60)
+
+GLOBAL_STATE = {}
+UNPUSHED_DELTAS = {}
 
 SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkcXhhZnlxcWtoeHVpcHpjamNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyOTYzNzIsImV4cCI6MjEwMjg3MjM3Mn0.dAerrc1sTh8CSnY6vZ4NtuvPXWNwjsHCl9gWZ436MLk"
@@ -294,15 +302,44 @@ def read_local_state():
             return {}
     return {}
 
-def load_state():
-    """Syncs with remote and loads the freshest state into memory (Thread-Safe)."""
+def load_initial_state():
+    """Called ONCE at startup to sync with remote Git and populate GLOBAL_STATE in RAM."""
+    global GLOBAL_STATE
     with state_lock:
         quiet_git_pull()
-        return read_local_state()
+        GLOBAL_STATE = read_local_state()
+        return copy.deepcopy(GLOBAL_STATE)
 
-def save_state(deltas, commit_msg="Update seat state"):
-    """Thread-Safe save and push to Git."""
+def get_session_state(s_id, s_date, s_time):
+    """Thread-safely retrieves a session's current state from RAM."""
     with state_lock:
+        if s_id not in GLOBAL_STATE:
+            GLOBAL_STATE[s_id] = {"date": s_date, "time": s_time, "total": 0, "rows": {}}
+        return copy.deepcopy(GLOBAL_STATE[s_id])
+
+def update_local_state(deltas):
+    """
+    Updates RAM and local disk immediately without touching Git.
+    Records changes in UNPUSHED_DELTAS so downward bookings are preserved for the next Git push.
+    """
+    with state_lock:
+        for s_id, s_data in deltas.items():
+            GLOBAL_STATE[s_id] = copy.deepcopy(s_data)
+            UNPUSHED_DELTAS[s_id] = copy.deepcopy(s_data)
+        with open(STATE_FILE, "w") as f:
+            json.dump(GLOBAL_STATE, f, indent=2)
+
+def push_state_to_git(commit_msg="Update seat state"):
+    """
+    Thread-safely merges all accumulated UNPUSHED_DELTAS with remote Git and pushes.
+    Called ONLY on unblocks, first-run baseline, or final 6-hour runner shutdown.
+    """
+    global GLOBAL_STATE
+    with state_lock:
+        if not UNPUSHED_DELTAS:
+            print("[GIT] No unpushed state changes in memory. Skipping Git push.")
+            return
+
         for attempt in range(3):
             # 1. Force sync local repo with remote
             quiet_git_pull()
@@ -310,13 +347,14 @@ def save_state(deltas, commit_msg="Update seat state"):
             # 2. Read the newly synced remote state
             latest_state = read_local_state()
             
-            # 3. Merge our locally tracked changes (deltas) into this state
-            for s_id, s_data in deltas.items():
-                latest_state[s_id] = s_data
+            # 3. Merge our RAM state and all unpushed deltas on top of remote state
+            latest_state.update(GLOBAL_STATE)
+            latest_state.update(UNPUSHED_DELTAS)
+            GLOBAL_STATE = copy.deepcopy(latest_state)
                 
             # 4. Save the merged state to disk
             with open(STATE_FILE, "w") as f:
-                json.dump(latest_state, f, indent=2)
+                json.dump(GLOBAL_STATE, f, indent=2)
                 
             # 5. Commit
             subprocess.run(["git", "add", STATE_FILE], capture_output=True, check=False)
@@ -329,16 +367,17 @@ def save_state(deltas, commit_msg="Update seat state"):
                 # 6. Push
                 if quiet_git_push():
                     print(f"[GIT] Successfully pushed merged state to repository.")
-                    return latest_state
+                    UNPUSHED_DELTAS.clear()
+                    return
                 else:
                     print(f"[GIT] Push attempt {attempt+1} failed (likely concurrent push). Retrying merge...")
                     time.sleep(2)
             else:
-                print("[GIT] Merged state is identical to remote. Nothing to push.")
-                return latest_state
+                print("[GIT] Merged state is identical to remote. Clearing dirty queue.")
+                UNPUSHED_DELTAS.clear()
+                return
                 
-        print("[GIT] ❌ Failed to push after 3 attempts. Local memory updated with last known merge.")
-        return latest_state
+        print("[GIT] ❌ Failed to push after 3 attempts. Changes remain queued in UNPUSHED_DELTAS.")
 
 def trigger_ntfy(message, image_bytes=None, click_url=None):
     print(f"\n[!] ALERTING VIA NTFY: {message.replace(chr(10), ' | ')}")
@@ -423,10 +462,13 @@ def poll_date_sessions(date_code, target_sessions, start_time, is_first_run):
         print(f"[{date_code}] 🔄 STARTING POLLING CYCLE {cycle_count}")
         print(f"[{date_code}] ==================================================")
         
-        state = load_state()
         deltas = {}
+        should_push_git = False
         
         for index, session in enumerate(target_sessions, 1):
+            if (time.time() - start_time) >= MAX_RUNTIME_SECONDS:
+                break
+
             s_id = session["sessionId"]
             s_date = session["dateCode"]
             s_time = session["time"]
@@ -444,25 +486,31 @@ def poll_date_sessions(date_code, target_sessions, start_time, is_first_run):
             
             print(f"[{date_code}]    -> Session [{s_id}] ({s_time}) | Available Seats: {current_total}")
             
-            if s_id not in state:
-                state[s_id] = {"date": s_date, "time": s_time, "total": 0, "rows": {}}
+            session_state = get_session_state(s_id, s_date, s_time)
+            previous_total = session_state.get("total", 0)
+            previous_rows = session_state.get("rows", {})
             
-            previous_total = state[s_id].get("total", 0)
-            previous_rows = state[s_id].get("rows", {})
-            
+            raw_unblocked_count = 0
             newly_unblocked_count = 0
             unblocked_rows_list = []
+            ignored_unblocked_rows = []
             
             for row, seats in current_seats.items():
                 old_seats_in_row = previous_rows.get(row, [])
                 new_seats = set(seats) - set(old_seats_in_row)
                 
                 if new_seats:
-                    newly_unblocked_count += len(new_seats)
-                    unblocked_rows_list.append(row)
+                    raw_unblocked_count += len(new_seats)
+                    if row.strip().upper() in IGNORE_ROWS:
+                        ignored_unblocked_rows.append(row)
+                    else:
+                        newly_unblocked_count += len(new_seats)
+                        unblocked_rows_list.append(row)
             
             if newly_unblocked_count > 0:
-                print(f"[{date_code}]    -> 🟢 DETECTED UNBLOCKS: +{newly_unblocked_count} new seats!")
+                print(f"[{date_code}]    -> 🟢 DETECTED UNBLOCKS: +{newly_unblocked_count} new seat(s) in valid rows!")
+                if ignored_unblocked_rows:
+                    print(f"[{date_code}]    -> ⚪ (Also ignored unblocks in excluded rows: {', '.join(sorted(ignored_unblocked_rows))})")
                 
                 if not is_first_run:
                     if newly_unblocked_count >= 7:
@@ -504,24 +552,33 @@ def poll_date_sessions(date_code, target_sessions, start_time, is_first_run):
                             print(f"[{date_code}]    -> ⚠️ Failed to render UI image: {e}")
                             trigger_ntfy(msg, click_url=seat_layout_url)
                     else:
-                        print(f"[{date_code}]    -> 🟡 Less than 3 seats unblocked. Skipping notification.")
+                        print(f"[{date_code}]    -> 🟡 Less than 7 seats unblocked ({newly_unblocked_count}). Skipping notification.")
                 
-                state[s_id]["rows"] = current_seats
-                state[s_id]["total"] = current_total
-                deltas[s_id] = state[s_id]
+                deltas[s_id] = {"date": s_date, "time": s_time, "total": current_total, "rows": current_seats}
+                should_push_git = True
 
-            elif current_total < previous_total:
-                print(f"[{date_code}]    -> 🔴 Seats booked. Total dropped from {previous_total} down to {current_total}.")
-                state[s_id]["rows"] = current_seats
-                state[s_id]["total"] = current_total
-                deltas[s_id] = state[s_id]
+            elif current_seats != previous_rows or current_total != previous_total:
+                if raw_unblocked_count > 0 and ignored_unblocked_rows:
+                    print(f"[{date_code}]    -> ⚪ Ignored +{raw_unblocked_count} unblock(s) in excluded row(s): {', '.join(sorted(ignored_unblocked_rows))}. Updating RAM.")
+                else:
+                    print(f"[{date_code}]    -> 🔴 Seats booked. Total dropped from {previous_total} down to {current_total}. Updating RAM (No Git push).")
+                deltas[s_id] = {"date": s_date, "time": s_time, "total": current_total, "rows": current_seats}
+                if is_first_run:
+                    should_push_git = True
                 
             else:
                 print(f"[{date_code}]    -> ⚪ No changes detected.")
 
         if deltas:
-            print(f"\n[{date_code}] [STATE] Cycle finished. Changes detected, merging and saving...")
-            state = save_state(deltas, f"State update at cycle {cycle_count} for date {date_code}")
+            # Always update RAM and local disk immediately
+            update_local_state(deltas)
+            
+            # Only push to Git if an unblock occurred or if establishing the first-run baseline
+            if should_push_git:
+                print(f"\n[{date_code}] [STATE] Unblock/Baseline detected. Syncing and pushing to Git...")
+                push_state_to_git(f"State update at cycle {cycle_count} for date {date_code}")
+            else:
+                print(f"\n[{date_code}] [STATE] Cycle finished. Downward bookings/ignored rows saved in RAM (queued for exit sync).")
         else:
             print(f"\n[{date_code}] [STATE] Cycle finished. No changes detected.")
             
@@ -679,6 +736,8 @@ def main():
     init_fonts()
     print("==================================================")
     print("🚀 STARTING BMS SEAT SCRAPER (MULTI-THREADED)")
+    if IGNORE_ROWS:
+        print(f"🚫 IGNORING ROWS: {', '.join(sorted(IGNORE_ROWS))}")
     print("==================================================")
     print("Fetching valid sessions...")
     target_sessions = fetch_sessions()
@@ -692,14 +751,15 @@ def main():
         return
 
     print("\n[GIT] Loading initial state from repository...")
-    state = load_state()
+    state = load_initial_state()
     is_first_run = len(state) == 0
     if is_first_run:
         print("[STATE] Empty state found. Initializing baselines silently...")
     else:
         print(f"[STATE] Loaded existing state for {len(state)} sessions.")
 
-    # Group sessions by date
+    signal.signal(signal.SIGTERM, lambda signum, frame: (_ for _ in ()).throw(SystemExit(0)))
+
     sessions_by_date = defaultdict(list)
     for session in target_sessions:
         sessions_by_date[session["dateCode"]].append(session)
@@ -715,11 +775,15 @@ def main():
         threads.append(t)
         t.start()
         
-    # Wait for all threads to finish (which takes MAX_RUNTIME_SECONDS)
-    for t in threads:
-        t.join()
-        
-    print("\n🏁 All threads finished. Time limit reached. Gracefully shutting down.")
+    try:
+        for t in threads:
+            t.join()
+    except (KeyboardInterrupt, SystemExit):
+        print("\n⚠️ Shutdown signal received! Preparing final state sync...")
+    finally:
+        print("\n🔄 [SHUTDOWN SYNC] Flushing any unpushed seat bookings from RAM to Git...")
+        push_state_to_git("Final state sync on runner shutdown")
+        print("🏁 All threads finished. Gracefully shutting down.")
 
 
 if __name__ == "__main__":
