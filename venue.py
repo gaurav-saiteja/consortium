@@ -543,20 +543,25 @@ def make_bms_request(method, url, max_retries=9, **kwargs):
 def fetch_date_events(date_code):
     """
     Fetches getShowtimesByVenue for a single date_code and extracts matching ChildEvents.
-    Returns (success_bool, venue_name, booking_url, list_of_child_events).
+    Returns (success_bool, date_matched_bool, venue_name, booking_url, list_of_child_events).
     """
     url = f"https://cinemas.bookmyshow.com/api/getShowtimesByVenue?venueCode={VENUE_CODE}&dateCode={date_code}"
     resp = make_bms_request('GET', url)
     if not resp or resp.status_code != 200:
-        return False, "", "", []
+        return False, False, "", "", []
 
     try:
         data = resp.json()
         show_details = data.get("ShowDetails", [])
         if not show_details:
-            return True, VENUE_CODE, build_booking_url(VENUE_CODE, VENUE_CODE, date_code), []
+            return True, False, VENUE_CODE, build_booking_url(VENUE_CODE, VENUE_CODE, date_code), []
 
         detail = show_details[0]
+        returned_date = str(detail.get("Date", "")).strip()
+        if returned_date != str(date_code).strip():
+            print(f"[{date_code}]    -> ⏭️ Date mismatch: requested '{date_code}', but API returned '{returned_date}' (0 shows allotted yet).")
+            return True, False, "", "", []
+
         venue_info = detail.get("Venues", {})
         venue_name = venue_info.get("VenueName", VENUE_CODE)
         booking_url = build_booking_url(venue_name, VENUE_CODE, date_code)
@@ -598,11 +603,11 @@ def fetch_date_events(date_code):
                     "shows": shows
                 })
 
-        return True, venue_name, booking_url, matched_child_events
+        return True, True, venue_name, booking_url, matched_child_events
 
     except Exception as e:
         print(f"[{date_code}]    -> ⚠️ JSON parse error: {e}")
-        return False, "", "", []
+        return False, False, "", "", []
 
 def poll_date_showtimes(date_code, start_time):
     cycle_count = 1
@@ -612,7 +617,7 @@ def poll_date_showtimes(date_code, start_time):
         print(f"[{date_code}] 🔄 STARTING SHOWTIME POLLING CYCLE {cycle_count}")
         print(f"[{date_code}] ==================================================")
 
-        ok, venue_name, booking_url, child_events = fetch_date_events(date_code)
+        ok, date_matched, venue_name, booking_url, child_events = fetch_date_events(date_code)
         if not ok:
             print(f"[{date_code}]    -> ⚠️ Failed fetching showtimes. Sleeping {POLL_INTERVAL_SECONDS}s...")
             time.sleep(POLL_INTERVAL_SECONDS)
@@ -620,6 +625,18 @@ def poll_date_showtimes(date_code, start_time):
             continue
 
         is_initialized, known_sessions = get_date_state(date_code)
+
+        if not date_matched:
+            if not is_initialized:
+                update_date_state(date_code, {})
+                print(f"[{date_code}] [STATE] Unallotted future date — empty baseline (0 sessions) established. Syncing to Git...")
+                push_state_to_git(f"Initialize empty showtime baseline for {date_code}")
+            else:
+                print(f"[{date_code}]    -> ⚪ Date not allotted yet on BMS. Ignoring fallback response. Sleeping {POLL_INTERVAL_SECONDS}s...")
+            time.sleep(POLL_INTERVAL_SECONDS)
+            cycle_count += 1
+            continue
+
         updated_sessions = copy.deepcopy(known_sessions)
         any_new_shows = False
         now_ist = get_current_ist_str()
