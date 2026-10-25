@@ -419,7 +419,7 @@ def poll_date_sessions(date_code, target_sessions, start_time, is_first_run):
                 print(f"[{date_code}]    -> 🟢 DETECTED UNBLOCKS: +{newly_unblocked_count} new seats!")
                 
                 if not is_first_run:
-                    if newly_unblocked_count >= 3:
+                    if newly_unblocked_count >= 7:
                         rows_str = ", ".join(sorted(unblocked_rows_list))
                         human_date = humanize_date(s_date)
                         movie_name = session.get("movieTitle", TARGET_MOVIE)
