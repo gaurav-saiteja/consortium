@@ -34,7 +34,7 @@ DATES = [d.strip() for d in dates_env.split(",") if d.strip()]
 VENUE_CODE = os.getenv("VENUE_CODE", "").strip()
 TARGET_MOVIE = os.getenv("TARGET_MOVIE", "").strip()
 CITY = os.getenv("CITY", "hyderabad").strip().lower()
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL", "15"))
+POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL", "3"))
 
 dates_hash = hashlib.md5(dates_env.encode('utf-8')).hexdigest()[:8]
 clean_movie = "".join(c for c in TARGET_MOVIE if c.isalnum()) or "ALL"
