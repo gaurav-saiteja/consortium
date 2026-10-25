@@ -94,7 +94,7 @@ jobs:
               warp-cli --accept-tos status | grep -q "Connected" && break
               sleep 0.2
             done
-            echo "[WARP-BG] WARP SOCKS5 proxy is hot and standing by on 127.0.0.1:40000."
+            echo "WARP SOCKS5 proxy is standing by on 127.0.0.1:40000."
           ) >/tmp/warp_setup.log 2>&1 &
 
           # 5. Launch Immediately!
