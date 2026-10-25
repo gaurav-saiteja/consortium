@@ -6,7 +6,6 @@ import os
 import re
 import random
 import io
-from supabase import create_client, Client
 import base64
 import urllib.request
 from PIL import Image, ImageDraw, ImageFont
@@ -45,7 +44,22 @@ MAX_RUNTIME_SECONDS = (5 * 3600) + (55 * 60)
 
 SUPABASE_URL = "https://edqxafyqqkhxuipzcjcd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkcXhhZnlxcWtoeHVpcHpjamNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyOTYzNzIsImV4cCI6MjEwMjg3MjM3Mn0.dAerrc1sTh8CSnY6vZ4NtuvPXWNwjsHCl9gWZ436MLk"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def stage_tweet_supabase(tweet_text, image_base64):
+    url = f"{SUPABASE_URL}/rest/v1/staged_tweets"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
+    payload = {
+        "tweet_text": tweet_text,
+        "image_base64": image_base64
+    }
+    resp = requests.post(url, headers=headers, json=payload, timeout=15)
+    if resp.status_code not in (200, 201, 204):
+        raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
 
 USE_WARP = False
 
@@ -114,6 +128,29 @@ def parse_grid_data(str_data):
         grid.append(row_data)
     return grid
 
+SCALE = 4
+FONT_REGULAR = None
+FONT_BOLD = None
+
+def init_fonts():
+    """Loads pre-cached Roboto fonts into RAM once before threads start."""
+    global FONT_REGULAR, FONT_BOLD
+    roboto_reg_path = "Roboto-Regular.ttf"
+    roboto_bold_path = "Roboto-Medium.ttf"
+    
+    if not os.path.exists(roboto_reg_path):
+        urllib.request.urlretrieve("https://raw.githubusercontent.com/googlefonts/roboto/main/src/hinted/Roboto-Regular.ttf", roboto_reg_path)
+    if not os.path.exists(roboto_bold_path):
+        urllib.request.urlretrieve("https://raw.githubusercontent.com/googlefonts/roboto/main/src/hinted/Roboto-Medium.ttf", roboto_bold_path)
+        
+    try:
+        FONT_REGULAR = ImageFont.truetype(roboto_reg_path, 11 * SCALE)
+        FONT_BOLD = ImageFont.truetype(roboto_bold_path, 13 * SCALE)
+    except Exception as e:
+        print(f"    -> ⚠️ Font load error: {e}. Falling back to default.")
+        FONT_REGULAR = ImageFont.load_default()
+        FONT_BOLD = FONT_REGULAR
+
 def render_seat_image(grid, new_seats_dict):
     """
     Renders a pixel-perfect, 4X supersampled WebP image of the seat layout.
@@ -176,11 +213,8 @@ def render_seat_image(grid, new_seats_dict):
     roboto_reg_path = "Roboto-Regular.ttf"
     roboto_bold_path = "Roboto-Medium.ttf"
     
-    # Download directly from Google's official font repository if not cached
-    if not os.path.exists(roboto_reg_path):
-        urllib.request.urlretrieve("https://raw.githubusercontent.com/googlefonts/roboto/main/src/hinted/Roboto-Regular.ttf", roboto_reg_path)
-    if not os.path.exists(roboto_bold_path):
-        urllib.request.urlretrieve("https://raw.githubusercontent.com/googlefonts/roboto/main/src/hinted/Roboto-Medium.ttf", roboto_bold_path)
+    font = FONT_REGULAR or ImageFont.load_default()
+    row_font = FONT_BOLD or font
         
     try:
         # Load the newly cached Roboto fonts
@@ -350,8 +384,18 @@ def trigger_ntfy(message, image_bytes=None, click_url=None):
             print(f"    -> Waiting {sleep_time}s before next ntfy attempt...")
             time.sleep(sleep_time)
 
+def wait_for_warp_connected(timeout_sec=10):
+    """Polls warp-cli at 0.2s intervals until the SOCKS5 tunnel is active."""
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        res = subprocess.run(["warp-cli", "--accept-tos", "status"], capture_output=True, text=True, check=False)
+        if "Connected" in res.stdout:
+            return True
+        time.sleep(0.2)
+    return False
+
 def toggle_warp(expected_warp_state):
-    """Toggles Cloudflare WARP on/off and updates proxy state (Thread-Safe)."""
+    """Toggles Cloudflare WARP on/off with sub-second readiness polling (Thread-Safe)."""
     global USE_WARP
     with warp_lock:
         if USE_WARP != expected_warp_state:
@@ -363,9 +407,11 @@ def toggle_warp(expected_warp_state):
             subprocess.run(["warp-cli", "--accept-tos", "disconnect"], capture_output=True, check=False)
             USE_WARP = False
         else:
-            print("    -> 🚨 [IP ROTATION] WARP is OFF. Connecting (Switching to Cloudflare Proxy)...")
-            subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
-            time.sleep(3)  # Wait for the tunnel to establish
+            print("    -> 🚨 [IP ROTATION] WARP is OFF. Switching to Cloudflare WARP Proxy...")
+            # Check if background setup already connected the proxy; if not, connect and poll every 0.2s
+            if not wait_for_warp_connected(timeout_sec=0.4):
+                subprocess.run(["warp-cli", "--accept-tos", "connect"], capture_output=True, check=False)
+                wait_for_warp_connected(timeout_sec=8)
             USE_WARP = True
 
 def poll_date_sessions(date_code, target_sessions, start_time, is_first_run):
@@ -450,10 +496,7 @@ def poll_date_sessions(date_code, target_sessions, start_time, is_first_run):
                             b64_string = base64.b64encode(img_bytes).decode('utf-8')
                             
                             try:
-                                supabase.table("staged_tweets").insert({
-                                    "tweet_text": tweet_payload,
-                                    "image_base64": b64_string
-                                }).execute()
+                                stage_tweet_supabase(tweet_payload, b64_string)
                                 print(f"[{date_code}]    -> 🚀 Tweet successfully staged in Supabase!")
                             except Exception as e:
                                 print(f"[{date_code}]    -> ⚠️ Failed to stage tweet in Supabase: {e}")
@@ -633,7 +676,7 @@ def parse_layout(str_data):
 
 def main():
     start_time = time.time()
-    
+    init_fonts()
     print("==================================================")
     print("🚀 STARTING BMS SEAT SCRAPER (MULTI-THREADED)")
     print("==================================================")
