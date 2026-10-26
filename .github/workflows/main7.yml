@@ -38,11 +38,9 @@ jobs:
           WORKER_PASSPHRASE: '${{ secrets.WORKER_PASSPHRASE }}'
           
           # --- STATIC CONFIGURATION ---
-          DATES: '20261105, 20261106, 20261107, 20261108'
+          DATES: '20261028, 20261029'
           VENUE_CODE: 'PRHN'
           TARGET_MOVIE: 'jailer'
-          TARGET_SCREEN: '6'
-          IGNORE_ROWS: 'A, B, C, D, E, F'
         run: |
           mkdir -p ~/.fast-cache/warp-debs ~/.fast-cache/fonts
 
@@ -98,4 +96,4 @@ jobs:
           ) >/tmp/warp_setup.log 2>&1 &
 
           # 5. Launch Immediately!
-          ~/.fast-cache/venv/bin/python -u unb_new_5.py
+          ~/.fast-cache/venv/bin/python -u venue.py
