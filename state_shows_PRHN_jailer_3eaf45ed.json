@@ -48,5 +48,43 @@
       "screenName": "SCREEN 4",
       "attributes": ""
     }
+  },
+  "20261029": {
+    "258226": {
+      "time": "10:45 AM",
+      "eventName": "Jailer 2 (Telugu) - Telugu",
+      "screenName": "SCREEN 6",
+      "attributes": "PCX Screen"
+    },
+    "258227": {
+      "time": "01:55 PM",
+      "eventName": "Jailer 2 (Telugu) - Telugu",
+      "screenName": "SCREEN 6",
+      "attributes": "PCX Screen"
+    },
+    "258228": {
+      "time": "05:05 PM",
+      "eventName": "Jailer 2 (Telugu) - Telugu",
+      "screenName": "SCREEN 6",
+      "attributes": "PCX Screen"
+    },
+    "258215": {
+      "time": "11:30 AM",
+      "eventName": "Jailer 2 - Tamil",
+      "screenName": "SCREEN 3",
+      "attributes": "BARCO 4K LASER"
+    },
+    "258217": {
+      "time": "05:05 PM",
+      "eventName": "Jailer 2 - Tamil",
+      "screenName": "SCREEN 4",
+      "attributes": ""
+    },
+    "258219": {
+      "time": "11:05 PM",
+      "eventName": "Jailer 2 - Tamil",
+      "screenName": "SCREEN 3",
+      "attributes": "BARCO 4K LASER"
+    }
   }
 }
