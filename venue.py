@@ -718,15 +718,11 @@ def poll_date_showtimes(date_code, start_time):
                         except Exception as e:
                             print(f"[{date_code}]    -> ⚠️ Failed sending ntfy alert for [{screen_label}]: {e}")
 
-                        if b64_string:
-                            try:
-                                stage_tweet_supabase(tweet_payload, b64_string)
-                                print(f"[{date_code}]    -> 🚀 Tweet successfully staged in Supabase for [{screen_label}]!")
-                            except Exception as e:
-                                print(f"[{date_code}]    -> ⚠️ Failed to stage tweet in Supabase for [{screen_label}]: {e}")
-                    except Exception as e:
-                        print(f"[{date_code}]    -> ⚠️ Failed to render BMS UI image: {e}")
-                        trigger_ntfy(msg, click_url=booking_url)
+                        try:
+                            stage_tweet_supabase(tweet_payload, b64_string)
+                            print(f"[{date_code}]    -> 🚀 Tweet successfully staged in Supabase for [{screen_label}]!")
+                        except Exception as e:
+                            print(f"[{date_code}]    -> ⚠️ Failed to stage tweet in Supabase for [{screen_label}]: {e}")
 
         if not is_initialized:
             update_date_state(date_code, updated_sessions)
@@ -768,7 +764,7 @@ def main():
     for idx, date_code in enumerate(DATES):
         if idx > 0:
             time.sleep(1.5)  # Stagger initial requests across date threads
-        t = threading.Thread(target=poll_date_showtimes, args=(date_code, start_time))
+        t = threading.Thread(target=poll_date_showtimes, args=(date_code, start_time), daemon=True)
         threads.append(t)
         t.start()
 
