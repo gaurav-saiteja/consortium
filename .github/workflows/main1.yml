@@ -1,4 +1,4 @@
-name: venue
+name: venue 1
 
 on:
   workflow_dispatch:
@@ -38,9 +38,9 @@ jobs:
           WORKER_PASSPHRASE: '${{ secrets.WORKER_PASSPHRASE }}'
           
           # --- STATIC CONFIGURATION ---
-          DATES: '20261117'
+          DATES: '20261217,20261218'
           VENUE_CODE: 'PIIC'
-          TARGET_MOVIE: 'yana'
+          TARGET_MOVIE: 'venge'
         run: |
           mkdir -p ~/.fast-cache/warp-debs ~/.fast-cache/fonts
 
