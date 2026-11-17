@@ -18,6 +18,24 @@
       "eventName": "Avengers: Doomsday (MS - Infinity Vision)(4DX 3D) - English",
       "screenName": "SCREEN 8",
       "attributes": "4DX"
+    },
+    "35468": {
+      "time": "08:40 AM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
+    },
+    "35470": {
+      "time": "03:50 PM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
+    },
+    "35472": {
+      "time": "11:00 PM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
     }
   }
 }
