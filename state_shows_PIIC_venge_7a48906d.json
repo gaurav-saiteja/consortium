@@ -1,4 +1,23 @@
 {
   "20261217": {},
-  "20261218": {}
+  "20261218": {
+    "35463": {
+      "time": "08:10 AM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision)(4DX 3D) - English",
+      "screenName": "SCREEN 8",
+      "attributes": "4DX"
+    },
+    "35464": {
+      "time": "11:45 AM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision)(4DX 3D) - English",
+      "screenName": "SCREEN 8",
+      "attributes": "4DX"
+    },
+    "35466": {
+      "time": "06:55 PM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision)(4DX 3D) - English",
+      "screenName": "SCREEN 8",
+      "attributes": "4DX"
+    }
+  }
 }
