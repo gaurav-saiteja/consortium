@@ -1,4 +1,23 @@
 {
-  "20261219": {},
+  "20261219": {
+    "35495": {
+      "time": "08:40 AM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
+    },
+    "35497": {
+      "time": "03:50 PM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
+    },
+    "35499": {
+      "time": "11:00 PM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
+    }
+  },
   "20261220": {}
 }
