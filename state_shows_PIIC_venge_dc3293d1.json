@@ -37,5 +37,42 @@
       "attributes": "4DX"
     }
   },
-  "20261220": {}
+  "20261220": {
+    "35490": {
+      "time": "08:10 AM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision)(4DX 3D) - English",
+      "screenName": "SCREEN 8",
+      "attributes": "4DX"
+    },
+    "35491": {
+      "time": "11:45 AM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision)(4DX 3D) - English",
+      "screenName": "SCREEN 8",
+      "attributes": "4DX"
+    },
+    "35493": {
+      "time": "06:55 PM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision)(4DX 3D) - English",
+      "screenName": "SCREEN 8",
+      "attributes": "4DX"
+    },
+    "35500": {
+      "time": "08:40 AM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
+    },
+    "35502": {
+      "time": "03:50 PM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
+    },
+    "35504": {
+      "time": "11:00 PM",
+      "eventName": "Avengers: Doomsday (MS-Infinity Vsn 3D) - English",
+      "screenName": "SCREEN 11",
+      "attributes": "PXL"
+    }
+  }
 }
