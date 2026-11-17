@@ -27,26 +27,32 @@
   },
   "20261218": {
     "122559": {
-      "time": "10:00 AM",
-      "eventName": "Avengers: Doomsday (MS - Infinity Vision) - English",
+      "time": "10:05 AM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
       "screenName": "SCREEN 1",
       "attributes": "HDR BY BARCO"
     },
     "122561": {
       "time": "01:05 PM",
-      "eventName": "Avengers: Doomsday (MS - Infinity Vision) - English",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
       "screenName": "SCREEN 7",
       "attributes": "BARCO FLAGSHIP LASER DOLBY ATMOS"
     },
     "122560": {
-      "time": "07:35 PM",
-      "eventName": "Avengers: Doomsday (MS - Infinity Vision) - English",
+      "time": "07:40 PM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
       "screenName": "SCREEN 1",
       "attributes": "HDR BY BARCO"
     },
     "122562": {
       "time": "10:45 PM",
-      "eventName": "Avengers: Doomsday (MS - Infinity Vision) - English",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
+      "screenName": "SCREEN 7",
+      "attributes": "BARCO FLAGSHIP LASER DOLBY ATMOS"
+    },
+    "122597": {
+      "time": "04:10 PM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
       "screenName": "SCREEN 7",
       "attributes": "BARCO FLAGSHIP LASER DOLBY ATMOS"
     }
