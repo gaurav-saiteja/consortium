@@ -2,13 +2,25 @@
   "20261217": {
     "40308": {
       "time": "10:15 AM",
-      "eventName": "Avengers: Doomsday (MS - Infinity Vision) - English",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
       "screenName": "SCREEN 1",
       "attributes": "LASER DOLBY ATMOS"
     },
     "40311": {
       "time": "07:30 PM",
-      "eventName": "Avengers: Doomsday (MS - Infinity Vision) - English",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
+      "screenName": "SCREEN 1",
+      "attributes": "LASER DOLBY ATMOS"
+    },
+    "40309": {
+      "time": "01:20 PM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
+      "screenName": "SCREEN 1",
+      "attributes": "LASER DOLBY ATMOS"
+    },
+    "40310": {
+      "time": "04:25 PM",
+      "eventName": "Avengers: Doomsday (MS - Infinity Vision 2D) - English",
       "screenName": "SCREEN 1",
       "attributes": "LASER DOLBY ATMOS"
     }
